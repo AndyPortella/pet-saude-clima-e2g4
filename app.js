@@ -47,24 +47,34 @@ function renderShell(){
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
  el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload());
 }
-function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",atividades:"📚",praca_tripulacao:"☀️",relatorio_mensal:"📄",rota_registros:"🗺️"})[s]||"•"}
+function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",fontes_evidencias:"🗂️",relatorio_mensal:"📄"})[s]||"•"}
 async function navigate(view){
  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
  if(view==="home") return renderHome();
  if(view==="admin") return renderAdmin();
  if(view==="praca_tripulacao") return renderPlaza();
  if(view==="relatorio_mensal") return renderReports();
+ if(view==="tripulacao") return renderCrew();
  return renderEntries(view);
 }
 async function renderHome(){
- const [{count:e},{count:p},{count:r}]=await Promise.all([
-  supabase.from("entries").select("*",{count:"exact",head:true}),
-  supabase.from("plaza_posts").select("*",{count:"exact",head:true}),
-  supabase.from("monthly_reports").select("*",{count:"exact",head:true})
+ const [{count:marcos},{count:gat4},{count:registros},{count:gestao}]=await Promise.all([
+  supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","rota_registros"),
+  supabase.from("crew_members").select("*",{count:"exact",head:true}).eq("gat","GAT 4"),
+  supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","registros_bordo"),
+  supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","cabine_gat4")
  ]);
- el("content").innerHTML=`<div class="hero"><div><h2>Onde estamos</h2><p>Um único ambiente compartilhado para trabalho, memória, evidências e convivência.</p></div></div>
- <div class="grid"><div class="stat"><b>${e||0}</b>registros de bordo</div><div class="stat"><b>${p||0}</b>publicações na Praça</div><div class="stat"><b>${r||0}</b>relatórios mensais</div><div class="stat"><b>${spaces.length}</b>ambientes habilitados</div></div>
+ el("content").innerHTML=`<div class="hero"><div><h2>Onde estamos</h2><p>Acompanhamento integrado da rota, da tripulação, das decisões e das evidências da Expedição Mauá.</p></div></div>
+ <div class="grid"><div class="stat"><b>${marcos||0}</b>marcos da rota</div><div class="stat"><b>${gat4||0}</b>participantes GAT 4</div><div class="stat"><b>${registros||0}</b>registros de bordo</div><div class="stat"><b>${gestao||0}</b>itens de gestão</div></div>
+ <div class="card"><h3>Situação atual</h3><p><b>GAT em foco:</b> GAT 4 — Itinerário Terapêutico e Cuidado em Rede. <b>Integração:</b> GAT 3 + GAT 4 / Eixo 2. <b>Próxima atracação:</b> 16/10/2026.</p></div>
  <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> Andreza + Raquel. <b>Eixo 2:</b> GAT 4 + GAT 3. <b>Cassino dos Oficiais:</b> preceptoras + orientadora de serviço + tutoria autorizada. <b>Praça da Tripulação:</b> espaço comum de pertencimento, convivência e circulação de ideias. <b>Coordenação:</b> visualiza e exporta, sem editar.</p></div>`;
+}
+async function renderCrew(){
+ const {data,error}=await supabase.from("crew_members").select("*").order("sort_order").order("display_name");
+ if(error){flash(error.message,"error");return}
+ const rows=data||[];
+ el("content").innerHTML=`<div class="hero"><div><h2>👥 Tripulação</h2><p>Composição real do Eixo 2: GAT 3 + GAT 4, preceptoras, orientadora e estudantes.</p></div></div>
+ <div class="card tablewrap"><table><thead><tr><th>Nome</th><th>Vínculo</th><th>Papel</th><th>Status</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.display_name)}</b></td><td>${esc(x.gat)}</td><td>${esc(x.participant_role)}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
