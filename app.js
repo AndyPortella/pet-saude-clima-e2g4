@@ -39,9 +39,10 @@ async function loadBase(){
  spaces=s||[]; (p||[]).forEach(x=>perms[x.space_slug]=x); (pr||[]).forEach(x=>profiles[x.user_id]=x);
 }
 function renderShell(){
+ const visibleSpaces=spaces.filter(s=>perms[s.slug]?.can_view===true);
  document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox"><span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[profile.role])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
  <div class="layout"><aside class="sidebar" id="nav"><button class="navbtn" data-view="home">🏠 Painel</button>
- ${spaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
+ ${visibleSpaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
  ${profile.role==="gat4_admin"?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
  <main class="main"><div id="flash"></div><div id="content"></div></main></div></div>`;
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
