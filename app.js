@@ -59,16 +59,55 @@ async function navigate(view){
  return renderEntries(view);
 }
 async function renderHome(){
- const [{count:marcos},{count:gat4},{count:registros},{count:gestao}]=await Promise.all([
+ const [{count:marcos},{count:gat4},{count:registros},{count:gestao},{data:panel}]=await Promise.all([
   supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","rota_registros"),
   supabase.from("crew_members").select("*",{count:"exact",head:true}).eq("gat","GAT 4"),
   supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","registros_bordo"),
-  supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","cabine_gat4")
+  supabase.from("entries").select("*",{count:"exact",head:true}).eq("space_slug","cabine_gat4"),
+  supabase.from("panel_settings").select("*").eq("id","home").maybeSingle()
  ]);
- el("content").innerHTML=`<div class="hero"><div><h2>Onde estamos</h2><p>Acompanhamento integrado da rota, da tripulação, das decisões e das evidências da Expedição Mauá.</p></div></div>
+ const p=panel||{
+  title:"Onde estamos",
+  intro:"Acompanhamento integrado da rota, da tripulação, das decisões e das evidências da Expedição Mauá.",
+  phase:"Em navegação",
+  focus:"GAT 4 — Itinerário Terapêutico e Cuidado em Rede",
+  integration:"GAT 3 + GAT 4 / Eixo 2",
+  next_attraction:"16/10/2026",
+  cabin_text:"Andreza + Raquel.",
+  eixo2_text:"GAT 4 + GAT 3.",
+  cassino_text:"preceptoras + orientadora de serviço + tutoria autorizada.",
+  praca_text:"espaço comum de pertencimento, convivência e circulação de ideias.",
+  coordination_text:"visualiza e exporta, sem editar."
+ };
+ el("content").innerHTML=`<div class="hero"><div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div>${profile.role==="gat4_admin"?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
  <div class="grid"><div class="stat"><b>${marcos||0}</b>marcos da rota</div><div class="stat"><b>${gat4||0}</b>participantes GAT 4</div><div class="stat"><b>${registros||0}</b>registros de bordo</div><div class="stat"><b>${gestao||0}</b>itens de gestão</div></div>
- <div class="card"><h3>Situação atual</h3><p><b>GAT em foco:</b> GAT 4 — Itinerário Terapêutico e Cuidado em Rede. <b>Integração:</b> GAT 3 + GAT 4 / Eixo 2. <b>Próxima atracação:</b> 16/10/2026.</p></div>
- <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> Andreza + Raquel. <b>Eixo 2:</b> GAT 4 + GAT 3. <b>Cassino dos Oficiais:</b> preceptoras + orientadora de serviço + tutoria autorizada. <b>Praça da Tripulação:</b> espaço comum de pertencimento, convivência e circulação de ideias. <b>Coordenação:</b> visualiza e exporta, sem editar.</p></div>`;
+ <div class="card"><h3>Situação atual</h3><p><b>Fase:</b> ${esc(p.phase)}. <b>GAT em foco:</b> ${esc(p.focus)}. <b>Integração:</b> ${esc(p.integration)}. <b>Próxima atracação:</b> ${esc(p.next_attraction)}.</p></div>
+ <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> ${esc(p.cabin_text)} <b>Eixo 2:</b> ${esc(p.eixo2_text)} <b>Cassino dos Oficiais:</b> ${esc(p.cassino_text)} <b>Praça da Tripulação:</b> ${esc(p.praca_text)} <b>Coordenação:</b> ${esc(p.coordination_text)}</p></div>
+ <div id="panelEditor"></div>`;
+ if(profile.role==="gat4_admin") el("editPanel").onclick=()=>renderPanelEditor(p);
+}
+function renderPanelEditor(p){
+ el("panelEditor").innerHTML=`<div class="card"><h3>Editar texto do Painel</h3><form id="panelForm"><div class="formgrid">
+ <div><label>Título</label><input name="title" value="${esc(p.title)}"></div>
+ <div><label>Fase</label><input name="phase" value="${esc(p.phase)}"></div>
+ <div class="full"><label>Texto de abertura</label><textarea name="intro">${esc(p.intro)}</textarea></div>
+ <div class="full"><label>GAT em foco</label><input name="focus" value="${esc(p.focus)}"></div>
+ <div><label>Integração</label><input name="integration" value="${esc(p.integration)}"></div>
+ <div><label>Próxima atracação</label><input name="next_attraction" value="${esc(p.next_attraction)}"></div>
+ <div class="full"><label>Cabine GAT 4</label><input name="cabin_text" value="${esc(p.cabin_text)}"></div>
+ <div class="full"><label>Eixo 2</label><input name="eixo2_text" value="${esc(p.eixo2_text)}"></div>
+ <div class="full"><label>Cassino dos Oficiais</label><input name="cassino_text" value="${esc(p.cassino_text)}"></div>
+ <div class="full"><label>Praça da Tripulação</label><input name="praca_text" value="${esc(p.praca_text)}"></div>
+ <div class="full"><label>Coordenação</label><input name="coordination_text" value="${esc(p.coordination_text)}"></div>
+ </div><div class="actions"><button class="btn">Salvar painel</button><button type="button" class="btn secondary" id="cancelPanel">Cancelar</button></div></form></div>`;
+ el("cancelPanel").onclick=()=>el("panelEditor").innerHTML="";
+ el("panelForm").onsubmit=async e=>{
+  e.preventDefault(); const fd=new FormData(e.target);
+  const payload={id:"home",updated_at:new Date().toISOString(),updated_by:session.user.id};
+  ["title","intro","phase","focus","integration","next_attraction","cabin_text","eixo2_text","cassino_text","praca_text","coordination_text"].forEach(k=>payload[k]=fd.get(k)||"");
+  const {error}=await supabase.from("panel_settings").upsert(payload);
+  if(error) flash(error.message,"error"); else {flash("Painel atualizado.");renderHome()}
+ };
 }
 async function renderCrew(){
  const {data,error}=await supabase.from("crew_members").select("*").order("sort_order").order("display_name");
