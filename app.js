@@ -144,5 +144,5 @@ async function loadAttachments(kind,id,target){
  const node=el(target);if(!node)return;const {data}=await supabase.from("attachments").select("*").eq("parent_kind",kind).eq("parent_id",id).order("created_at");if(!data?.length)return;
  const parts=[];for(const a of data){const {data:s}=await supabase.storage.from("e2g4-files").createSignedUrl(a.storage_path,300);if(s?.signedUrl)parts.push('<a class="file link" target="_blank" rel="noopener" href="'+esc(s.signedUrl)+'">📎 '+esc(a.file_name)+'</a>')}node.innerHTML=parts.join("<br>");
 }
-function subscribeRealtime(){["entries","monthly_reports","plaza_posts","plaza_comments","plaza_reactions","attachments"].forEach(t=>supabase.channel("rt-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{const active=document.querySelector(".navbtn.active")?.dataset.view;if(active)navigate(active)}).subscribe())}
+function subscribeRealtime(){["entries","monthly_reports","plaza_posts","plaza_comments","plaza_reactions","attachments","crew_members"].forEach(t=>supabase.channel("rt-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{const active=document.querySelector(".navbtn.active")?.dataset.view;if(active)navigate(active)}).subscribe())}
 start();
