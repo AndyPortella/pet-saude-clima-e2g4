@@ -3,7 +3,7 @@ const SUPABASE_URL="https://wyxeluofzyvbbihikrct.supabase.co";
 const SUPABASE_KEY="sb_publishable_RL1JIU9dK6hqpCq_nMUxXA_1QXGQikz";
 const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
 
-const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / SUS",student:"Estudante",coordinator_view:"Coordenação — visualização"};
+const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / Cassino dos Oficiais",student:"Estudante",coordinator_view:"Coordenação — visualização"};
 const statusLabels={planejado:"Planejado",em_andamento:"Em andamento",pendente:"Pendente",concluido:"Concluído",suspenso:"Suspenso"};
 let session=null,profile=null,spaces=[],perms={},profiles={};
 
@@ -22,7 +22,7 @@ async function start(){
 }
 function renderLogin(){
  document.getElementById("app").innerHTML=`<div class="loginwrap"><div class="login">
- <div style="font-size:36px">🧭</div><h1>Expedição Mauá</h1><p>Diário de Bordo colaborativo — PET-Saúde: Clima · Eixo 2 · GAT 4 + parceria GAT 3</p>
+ <div style="font-size:36px">🧭</div><h1>Expedição Mauá</h1><p>Diário de Bordo colaborativo — PET-Saúde: Clima · Eixo 2 · GAT 4 + GAT 3</p>
  <div id="loginmsg"></div><form id="loginform"><label>E-mail</label><input name="email" type="email" required>
  <label>Senha</label><input name="password" type="password" required><button class="btn">Entrar</button></form>
  <p style="color:var(--muted);font-size:13px">O acesso é criado pela administração do GAT 4.</p></div></div>`;
@@ -39,7 +39,7 @@ async function loadBase(){
  spaces=s||[]; (p||[]).forEach(x=>perms[x.space_slug]=x); (pr||[]).forEach(x=>profiles[x.user_id]=x);
 }
 function renderShell(){
- document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + parceria GAT 3</small></div></div><div class="userbox"><span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[profile.role])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
+ document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox"><span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[profile.role])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
  <div class="layout"><aside class="sidebar" id="nav"><button class="navbtn" data-view="home">🏠 Painel</button>
  ${spaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
  ${profile.role==="gat4_admin"?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
@@ -47,7 +47,7 @@ function renderShell(){
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
  el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload());
 }
-function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"🏥",atividades:"📚",praca_tripulacao:"☀️",relatorio_mensal:"📄",rota_registros:"🗺️"})[s]||"•"}
+function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",atividades:"📚",praca_tripulacao:"☀️",relatorio_mensal:"📄",rota_registros:"🗺️"})[s]||"•"}
 async function navigate(view){
  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
  if(view==="home") return renderHome();
@@ -64,7 +64,7 @@ async function renderHome(){
  ]);
  el("content").innerHTML=`<div class="hero"><div><h2>Onde estamos</h2><p>Um único ambiente compartilhado para trabalho, memória, evidências e convivência.</p></div></div>
  <div class="grid"><div class="stat"><b>${e||0}</b>registros de bordo</div><div class="stat"><b>${p||0}</b>publicações na Praça</div><div class="stat"><b>${r||0}</b>relatórios mensais</div><div class="stat"><b>${spaces.length}</b>ambientes habilitados</div></div>
- <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> Andreza + Raquel. <b>Eixo 2:</b> GAT 4 + Jenifer + Kristianne. <b>Território/SUS:</b> tutoria + preceptoras/orientadora. <b>Praça da Tripulação:</b> todos, inclusive estudantes. <b>Coordenação:</b> visualiza e exporta, sem editar.</p></div>`;
+ <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> Andreza + Raquel. <b>Eixo 2:</b> GAT 4 + GAT 3. <b>Cassino dos Oficiais:</b> preceptoras + orientadora de serviço + tutoria autorizada. <b>Praça da Tripulação:</b> espaço comum de pertencimento, convivência e circulação de ideias. <b>Coordenação:</b> visualiza e exporta, sem editar.</p></div>`;
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
@@ -96,11 +96,13 @@ async function renderPlaza(){
  (data||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
 }
 const reportFields=[["activities","1. Principais atividades realizadas no mês"],["settings_services","2. Cenários, serviços ou espaços envolvidos"],["audiences_quantities","3. Público envolvido e quantitativos"],["goal_objective","4. Meta ou objetivo trabalhado no mês"],["results","5. Principais resultados alcançados"],["indicators","6. Indicadores e números do período"],["articulations","7. Articulações realizadas"],["service_supervisor_participation","8. Participação do orientador de serviço"],["barriers","9. Principais barreiras ou dificuldades"],["strategies","10. Estratégias adotadas para superar as barreiras"],["products","11. Produtos elaborados no mês"],["evidences","12. Evidências e documentos comprobatórios"],["next_steps","13. Próximos passos"]];
+function reportCompletion(r){const done=reportFields.filter(([k])=>String(r?.[k]||"").trim()).length;return {done,total:reportFields.length,pct:Math.round(done/reportFields.length*100)}}
 async function renderReports(){
  const pm=perms.relatorio_mensal||{}; const {data}=await supabase.from("monthly_reports").select("*").order("competence",{ascending:false});
- el("content").innerHTML=`<div class="hero"><div><h2>📄 Relatório Mensal / Registro Oficial</h2><p>Estrutura oficial da coordenação, preenchida por competência.</p></div>${pm.can_create?'<button class="btn" id="newReport">+ Nova competência</button>':""}</div><div id="reportForm"></div><div id="reports"></div>`;
+ const structure=`<div class="card reportStructure"><div class="reportStructureHead"><div><h3>Os 13 campos do relatório mensal</h3><p>Esta estrutura permanece visível para que o relatório seja construído ao longo da Expedição, e não lembrado apenas no fechamento do mês.</p></div><span class="badge">13 campos oficiais</span></div><div class="reportChecklist">${reportFields.map(([k,l])=>'<div class="reportCheck"><span class="reportNumber">'+l.split(".")[0]+'</span><span>'+esc(l.replace(/^\\d+\\.\\s*/,''))+'</span></div>').join("")}</div></div>`;
+ el("content").innerHTML=`<div class="hero"><div><h2>📄 Relatório Mensal / Registro Oficial</h2><p>Dados construídos ao longo da Expedição. Visualize os 13 campos, acompanhe o preenchimento e exporte o registro oficial.</p></div>${pm.can_create?'<button class="btn" id="newReport">+ Nova competência</button>':""}</div>${structure}<div id="reportForm"></div><div id="reports"></div>`;
  if(pm.can_create) el("newReport").onclick=()=>reportForm(null);
- el("reports").innerHTML=(data||[]).map(r=>`<div class="card"><div class="meta"><span class="badge">${fmt(r.competence)}</span><span>${esc(r.gt)}</span></div><h3>Competência ${fmt(r.competence)}</h3><div class="actions">${pm.can_update?'<button class="btn secondary redit" data-id="'+r.id+'">Corrigir</button>':""}<button class="btn secondary rexport" data-id="${r.id}">Exportar .doc</button></div></div>`).join("")||'<div class="card">Nenhum relatório mensal ainda.</div>';
+ el("reports").innerHTML=(data||[]).map(r=>{const cp=reportCompletion(r);return `<div class="card"><div class="meta"><span class="badge">${fmt(r.competence)}</span><span>${esc(r.gt)}</span></div><div class="reportCardHead"><div><h3>Competência ${fmt(r.competence)}</h3><p>${cp.done} de ${cp.total} campos preenchidos</p></div><strong class="reportPct">${cp.pct}%</strong></div><div class="progress"><span style="width:${cp.pct}%"></span></div><div class="actions">${pm.can_update?'<button class="btn secondary redit" data-id="'+r.id+'">Abrir / corrigir os 13 campos</button>':""}<button class="btn secondary rexport" data-id="${r.id}">Exportar .doc</button></div></div>`}).join("")||'<div class="card"><h3>Nenhuma competência criada ainda.</h3><p>Os 13 campos acima já mostram a estrutura que será preenchida. Quando iniciar o mês, use “+ Nova competência”.</p></div>';
  document.querySelectorAll(".redit").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("monthly_reports").select("*").eq("id",b.dataset.id).single();reportForm(data)});
  document.querySelectorAll(".rexport").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("monthly_reports").select("*").eq("id",b.dataset.id).single();exportReport(data)});
 }
@@ -114,7 +116,7 @@ async function renderAdmin(){
  if(profile.role!=="gat4_admin") return navigate("home");
  const [{data:ps},{data:inv}]=await Promise.all([supabase.from("profiles").select("*").order("display_name"),supabase.from("invites").select("*").order("created_at",{ascending:false})]);
  el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Cadastre participantes e atribua o papel correto.</p></div></div>
- <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora SUS</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — visualização/exportação</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
+ <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora — Cassino dos Oficiais</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — visualização/exportação</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
  <div class="card"><h3>Infraestrutura</h3><p>Anexos ficam em bucket privado e obedecem às mesmas permissões.</p><button class="btn secondary" id="initStorage">Ativar anexos</button><hr><h3>Minha senha</h3><form id="pwf"><input name="password" type="password" minlength="8" placeholder="Nova senha" required><button class="btn secondary">Alterar minha senha</button></form></div></div>
  <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td></tr>').join("")}</tbody></table></div>
  <div class="card tablewrap"><h3>Convites / pré-cadastros</h3><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead><tbody>${(inv||[]).map(i=>'<tr><td>'+esc(i.display_name||"")+'</td><td>'+esc(i.email)+'</td><td>'+esc(roleLabels[i.role])+'</td></tr>').join("")}</tbody></table></div>`;
