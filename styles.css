@@ -62,3 +62,16 @@ radial-gradient(circle at 10% 90%,rgba(40,125,154,.14),transparent 30%)}
 @media(max-width:760px){.topbar{position:relative;align-items:flex-start;flex-direction:column}.layout{display:block}.sidebar{position:relative;top:0;height:auto;border-right:0;border-bottom:1px solid var(--line);display:flex;gap:7px;overflow:auto;padding:10px}.navbtn{min-width:max-content;width:auto}.main{padding:18px 12px 50px}.hero{flex-direction:column}.formgrid{grid-template-columns:1fr}.formgrid .full{grid-column:auto}}
 @media(max-width:520px){.grid{grid-template-columns:1fr}.brand h1{font-size:16px}.userbox{width:100%}.chip{max-width:100%;white-space:normal}.login{padding:22px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.reportStructure{background:linear-gradient(135deg,#fffdf7,#f2f8f5)}
+.reportStructureHead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.reportStructureHead p{margin:.35rem 0 0}
+.reportChecklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}
+.reportCheck{display:flex;gap:9px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:white;font-size:13px;line-height:1.35}
+.reportNumber{display:grid;place-items:center;min-width:24px;height:24px;border-radius:50%;background:#e8f1ef;color:var(--green2);font-weight:900;font-size:11px}
+.reportCardHead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.reportCardHead h3{margin:0}
+.reportCardHead p{margin:.3rem 0 0}
+.reportPct{font-size:28px;color:var(--green)}
+.progress{height:10px;border-radius:999px;background:#ece8db;overflow:hidden;margin-top:10px}
+.progress span{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:inherit}
+@media(max-width:760px){.reportChecklist{grid-template-columns:1fr}.reportStructureHead{flex-direction:column}}
