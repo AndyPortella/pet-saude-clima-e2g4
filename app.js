@@ -300,7 +300,7 @@ async function renderPlanning(){
  el("prevMonth").onclick=()=>{planningCursor=new Date(y,m-1,1);renderPlanning()};
  el("nextMonth").onclick=()=>{planningCursor=new Date(y,m+1,1);renderPlanning()};
  if(el("newPostit"))el("newPostit").onclick=()=>entryForm(slug,null);
- document.querySelectorAll(".calendarDay[data-date]").forEach(b=>b.onclick=()=>{if(pm.can_create||adminEditingEnabled()){entryForm(slug,{event_date:b.dataset.date,entry_type:"post-it",title:"",body:"",metadata:{state:"planejado"}});setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth"}),0)}});
+ document.querySelectorAll(".calendarDay[data-date]").forEach(b=>b.onclick=()=>{if(pm.can_create||adminEditingEnabled()){entryForm(slug,null);setTimeout(()=>{const form=el("ef");if(form){form.elements.event_date.value=b.dataset.date;form.elements.entry_type.value="post-it"}el("entryForm")?.scrollIntoView({behavior:"smooth"})},0)}});
  renderEntryList(slug,notes||[],pm);
  const reminder=document.querySelector(".postitReminder");if(reminder&&!matchMedia("(prefers-reduced-motion: reduce)").matches)reminder.animate([{transform:"scale(1)"},{transform:"scale(1.015)"},{transform:"scale(1)"}],{duration:1800,iterations:3,easing:"ease-in-out"});
 }
