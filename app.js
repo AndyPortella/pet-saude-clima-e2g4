@@ -135,7 +135,7 @@ async function renderEntries(slug){
  let q=supabase.from("entries").select("*").eq("space_slug",slug).order("display_order",{ascending:true,nullsFirst:false}).order("event_date",{ascending:false,nullsFirst:false}); const {data}=await q;
  el("content").innerHTML=`<div class="hero"><div><h2>${iconFor(slug)} ${esc(space?.title||slug)}</h2><p>${esc(space?.description||"")}</p></div><div class="actions">${adminEditingEnabled()?'<button class="btn secondary" id="resetOrder">↕ Ordem cronológica</button>':""}${pm.can_create?'<button class="btn" id="addEntry">+ Incluir</button>':""}</div></div><div id="entryForm"></div><div id="entryList"></div>`;
  if(adminEditingEnabled()&&el("resetOrder")) el("resetOrder").onclick=async()=>{const {error}=await supabase.rpc("reset_space_chronology",{p_space_slug:slug});if(error)flash(error.message,"error");else{flash("Ordem cronológica restaurada.");renderEntries(slug)}};
- if(pm.can_create) el("addEntry").onclick=()=>entryForm(slug,null);
+ if(pm.can_create) el("addEntry").onclick=()=>{entryForm(slug,null);el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"})};
  renderEntryList(slug,data||[],pm);
 }
 function renderMetaDetails(m){
@@ -148,15 +148,56 @@ function renderEntryList(slug,rows,pm){
  el("entryList").innerHTML=rows.length?rows.map(r=>`<article class="entry"><div class="meta"><span class="badge">${esc(r.entry_type)}</span>${r.status?'<span class="badge">'+esc(statusLabels[r.status])+'</span>':""}${r.event_date?'<span>📅 '+fmt(r.event_date)+'</span>':""}</div><h3>${esc(r.title)}</h3><p>${esc(r.body||"").replace(/\n/g,"<br>")}</p>${renderMetaDetails(r.metadata)}${r.due_date?'<p class="due"><b>Prazo:</b> '+fmt(r.due_date)+'</p>':""}${safeLink(r.link_url)?'<p><a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(r.link_url))+'">🔗 Abrir link</a></p>':""}<div id="files-${r.id}"></div><div class="actions">${adminEditingEnabled()?'<button class="btn secondary move up" title="Subir" data-id="'+r.id+'">↑</button><button class="btn secondary move down" title="Descer" data-id="'+r.id+'">↓</button>':""}${pm.can_update?'<button class="btn secondary edit" data-id="'+r.id+'">Corrigir</button>':""}${pm.can_delete?'<button class="btn warn del" data-id="'+r.id+'">Excluir</button>':""}${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="upload" data-parent="'+r.id+'" data-space="'+slug+'"></label>':""}</div></article>`).join(""):'<div class="card">Nenhum registro ainda.</div>';
  document.querySelectorAll(".move.up").forEach(b=>b.onclick=async()=>{const {error}=await supabase.rpc("move_entry",{p_entry_id:b.dataset.id,p_direction:-1});if(error)flash(error.message,"error");else renderEntries(slug)});
  document.querySelectorAll(".move.down").forEach(b=>b.onclick=async()=>{const {error}=await supabase.rpc("move_entry",{p_entry_id:b.dataset.id,p_direction:1});if(error)flash(error.message,"error");else renderEntries(slug)});
- document.querySelectorAll(".edit").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("entries").select("*").eq("id",b.dataset.id).single();entryForm(slug,data)});
+ document.querySelectorAll(".edit").forEach(b=>b.onclick=async()=>{const {data,error}=await supabase.from("entries").select("*").eq("id",b.dataset.id).single();if(error){flash(error.message,"error");return}entryForm(slug,data);setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"}),0)});
  document.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{if(confirm("Excluir somente este registro?")){const {error}=await supabase.from("entries").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderEntries(slug)}});
  document.querySelectorAll(".upload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"entry",i.dataset.parent,i.dataset.space).then(()=>renderEntries(slug)));
  rows.forEach(r=>loadAttachments("entry",r.id,"files-"+r.id));
 }
+function entryMetaFields(slug,row){
+ const defs={
+  fontes_evidencias:[["type","Tipo da fonte"],["scope","Escopo"],["reading_status","Status de leitura"]],
+  rota_registros:[["phase","Fase"],["scope","Escopo"],["decision","Decisão"],["action","Ação"],["evidence","Evidência"],["visibility","Visibilidade"]],
+  registros_bordo:[["scope","Escopo"],["participants","Participantes"],["action","Ação / encaminhamento"],["evidence","Evidência"],["responsible","Responsável"],["visibility","Visibilidade"]],
+  atividades:[["week","Semana"],["period","Período"],["gat","GAT"],["audience","Público"],["delivery","Entrega"],["weekly_hours","Carga semanal (h)"],["planned_hours","Horas previstas"]],
+  eixo2:[["scope","Escopo"],["participants","Participantes"],["evidence","Evidência"],["state","Situação documental"],["note","Nota factual"],["visibility","Visibilidade"]],
+  cabine_gat4:[["origin","Origem"],["responsible","Responsável"]],
+  territorio_sus:[["scope","Escopo"],["participants","Participantes"],["evidence","Evidência"],["responsible","Responsável"]],
+  estudio_tripulacao:[["audience","Público"],["delivery","Produto / entrega"]],
+  minha_rota:[["phase","Etapa da rota"],["note","Reflexão / nota"]],
+  desafios_quiz:[["audience","Público"],["delivery","Entrega"]],
+  radar_tripulacao:[["type","Tipo"],["source","Fonte"]],
+  ideias_acao:[["responsible","Responsável"],["state","Situação"]],
+  vitrine_expedicao:[["type","Tipo de produto"],["evidence","Evidência"]]
+ };
+ const keys=defs[slug]||[];
+ const m=row?.metadata||{};
+ return keys.map(([k,l])=>{
+  const v=esc(m[k]??"");
+  const long=["decision","action","evidence","participants","note"].includes(k);
+  return `<div class="${long?"full":""}"><label>${esc(l)}</label>${long?`<textarea name="meta_${k}">${v}</textarea>`:`<input name="meta_${k}" value="${v}">`}</div>`;
+ }).join("");
+}
 function entryForm(slug,row){
- el("entryForm").innerHTML=`<div class="card"><h3>${row?"Corrigir registro":"+ Incluir registro"}</h3><form id="ef"><div class="formgrid"><div><label>Título</label><input name="title" required value="${esc(row?.title||"")}"></div><div><label>Tipo</label><input name="entry_type" value="${esc(row?.entry_type||"registro")}"></div><div><label>Status</label><select name="status"><option value="">—</option>${Object.entries(statusLabels).map(([k,v])=>'<option value="'+k+'" '+(row?.status===k?"selected":"")+'>'+v+'</option>').join("")}</select></div><div><label>Data</label><input name="event_date" type="date" value="${row?.event_date||""}"></div><div class="full"><label>Descrição</label><textarea name="body">${esc(row?.body||"")}</textarea></div><div class="full"><label>Link (YouTube, Instagram, site etc.)</label><input name="link_url" type="url" value="${esc(row?.link_url||"")}"></div></div><div class="actions"><button class="btn">Salvar</button><button type="button" class="btn secondary" id="cancelE">Cancelar</button></div></form></div>`;
+ const sourceMode=slug==="fontes_evidencias";
+ el("entryForm").innerHTML=`<div class="card editorCard"><h3>${row?"Corrigir registro":"+ Incluir registro"}</h3><form id="ef"><div class="formgrid">
+ <div><label>${sourceMode?"Nome do arquivo / fonte":"Título"}</label><input name="title" required value="${esc(row?.title||"")}"></div>
+ <div><label>Tipo de registro</label><input name="entry_type" value="${esc(row?.entry_type||"registro")}"></div>
+ <div><label>Status</label><select name="status"><option value="">—</option>${Object.entries(statusLabels).map(([k,v])=>'<option value="'+k+'" '+(row?.status===k?"selected":"")+'>'+v+'</option>').join("")}</select></div>
+ <div><label>Data</label><input name="event_date" type="date" value="${row?.event_date||""}"></div>
+ <div><label>Prazo</label><input name="due_date" type="date" value="${row?.due_date||""}"></div>
+ <div class="full"><label>${sourceMode?"Uso no Diário de Bordo":"Descrição"}</label><textarea name="body">${esc(row?.body||"")}</textarea></div>
+ ${entryMetaFields(slug,row)}
+ <div class="full"><label>Link (YouTube, Instagram, site etc.)</label><input name="link_url" type="url" value="${esc(row?.link_url||"")}"></div>
+ </div><div class="actions"><button class="btn">Salvar alterações</button><button type="button" class="btn secondary" id="cancelE">Cancelar</button></div></form></div>`;
  el("cancelE").onclick=()=>el("entryForm").innerHTML="";
- el("ef").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const payload={space_slug:slug,title:f.get("title"),entry_type:f.get("entry_type")||"registro",status:f.get("status")||null,event_date:f.get("event_date")||null,body:f.get("body")||null,link_url:f.get("link_url")||null,updated_by:session.user.id};let q=row?supabase.from("entries").update(payload).eq("id",row.id):supabase.from("entries").insert({...payload,created_by:session.user.id});const {error}=await q;if(error)flash(error.message,"error");else{flash("Registro salvo.");renderEntries(slug)}};
+ el("ef").onsubmit=async e=>{
+  e.preventDefault();const f=new FormData(e.target);
+  const metadata={...(row?.metadata||{})};
+  for(const [k,v] of f.entries()) if(k.startsWith("meta_")) metadata[k.slice(5)]=v===""?null:v;
+  const payload={space_slug:slug,title:f.get("title"),entry_type:f.get("entry_type")||"registro",status:f.get("status")||null,event_date:f.get("event_date")||null,due_date:f.get("due_date")||null,body:f.get("body")||null,link_url:f.get("link_url")||null,metadata,updated_by:session.user.id};
+  let q=row?supabase.from("entries").update(payload).eq("id",row.id):supabase.from("entries").insert({...payload,created_by:session.user.id});
+  const {error}=await q;if(error)flash(error.message,"error");else{flash("Alterações salvas.");renderEntries(slug)}
+ };
 }
 async function renderPlaza(){
  const pm=perms.praca_tripulacao||{};
