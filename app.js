@@ -48,7 +48,7 @@ function renderShell(){
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
  el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload());
 }
-function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",fontes_evidencias:"🗂️",relatorio_mensal:"📄"})[s]||"•"}
+function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",estudio_tripulacao:"🎙️",minha_rota:"🧠",desafios_quiz:"🎯",radar_tripulacao:"📡",ideias_acao:"💡",vitrine_expedicao:"🏆",fontes_evidencias:"🗂️",relatorio_mensal:"📄"})[s]||"•"}
 async function navigate(view){
  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
  if(view==="home") return renderHome();
@@ -119,13 +119,19 @@ async function renderCrew(){
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
- const {data}=await supabase.from("entries").select("*").eq("space_slug",slug).order("created_at",{ascending:false});
+ let q=supabase.from("entries").select("*").eq("space_slug",slug); q=(slug==="rota_registros"||slug==="atividades")?q.order("event_date",{ascending:true,nullsFirst:false}).order("created_at",{ascending:true}):q.order("created_at",{ascending:false}); const {data}=await q;
  el("content").innerHTML=`<div class="hero"><div><h2>${iconFor(slug)} ${esc(space?.title||slug)}</h2><p>${esc(space?.description||"")}</p></div><div class="actions">${pm.can_create?'<button class="btn" id="addEntry">+ Incluir</button>':""}</div></div><div id="entryForm"></div><div id="entryList"></div>`;
  if(pm.can_create) el("addEntry").onclick=()=>entryForm(slug,null);
  renderEntryList(slug,data||[],pm);
 }
+function renderMetaDetails(m){
+ if(!m||typeof m!=="object")return "";
+ const labels={phase:"Fase",scope:"Escopo",decision:"Decisão",action:"Ação",evidence:"Evidência",visibility:"Visibilidade",participants:"Participantes",responsible:"Responsável",origin:"Origem",note:"Nota factual",week:"Semana",period:"Período",gat:"GAT",audience:"Público",delivery:"Entrega",weekly_hours:"Carga semanal",planned_hours:"Horas previstas",type:"Tipo",reading_status:"Leitura",source:"Fonte"};
+ const parts=Object.entries(labels).filter(([k])=>m[k]!==undefined&&m[k]!==null&&String(m[k]).trim()!=="").map(([k,l])=>`<div><b>${l}</b><span>${esc(m[k])}${k==="weekly_hours"||k==="planned_hours"?" h":""}</span></div>`);
+ return parts.length?`<div class="entryDetails">${parts.join("")}</div>`:"";
+}
 function renderEntryList(slug,rows,pm){
- el("entryList").innerHTML=rows.length?rows.map(r=>`<article class="entry"><div class="meta"><span class="badge">${esc(r.entry_type)}</span>${r.status?'<span class="badge">'+esc(statusLabels[r.status])+'</span>':""}${r.event_date?'<span>📅 '+fmt(r.event_date)+'</span>':""}</div><h3>${esc(r.title)}</h3><p>${esc(r.body||"").replace(/\n/g,"<br>")}</p>${safeLink(r.link_url)?'<p><a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(r.link_url))+'">🔗 Abrir link</a></p>':""}<div id="files-${r.id}"></div><div class="actions">${pm.can_update?'<button class="btn secondary edit" data-id="'+r.id+'">Corrigir</button>':""}${pm.can_delete?'<button class="btn warn del" data-id="'+r.id+'">Excluir</button>':""}${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="upload" data-parent="'+r.id+'" data-space="'+slug+'"></label>':""}</div></article>`).join(""):'<div class="card">Nenhum registro ainda.</div>';
+ el("entryList").innerHTML=rows.length?rows.map(r=>`<article class="entry"><div class="meta"><span class="badge">${esc(r.entry_type)}</span>${r.status?'<span class="badge">'+esc(statusLabels[r.status])+'</span>':""}${r.event_date?'<span>📅 '+fmt(r.event_date)+'</span>':""}</div><h3>${esc(r.title)}</h3><p>${esc(r.body||"").replace(/\n/g,"<br>")}</p>${renderMetaDetails(r.metadata)}${r.due_date?'<p class="due"><b>Prazo:</b> '+fmt(r.due_date)+'</p>':""}${safeLink(r.link_url)?'<p><a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(r.link_url))+'">🔗 Abrir link</a></p>':""}<div id="files-${r.id}"></div><div class="actions">${pm.can_update?'<button class="btn secondary edit" data-id="'+r.id+'">Corrigir</button>':""}${pm.can_delete?'<button class="btn warn del" data-id="'+r.id+'">Excluir</button>':""}${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="upload" data-parent="'+r.id+'" data-space="'+slug+'"></label>':""}</div></article>`).join(""):'<div class="card">Nenhum registro ainda.</div>';
  document.querySelectorAll(".edit").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("entries").select("*").eq("id",b.dataset.id).single();entryForm(slug,data)});
  document.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{if(confirm("Excluir somente este registro?")){const {error}=await supabase.from("entries").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderEntries(slug)}});
  document.querySelectorAll(".upload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"entry",i.dataset.parent,i.dataset.space).then(()=>renderEntries(slug)));
@@ -137,14 +143,34 @@ function entryForm(slug,row){
  el("ef").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const payload={space_slug:slug,title:f.get("title"),entry_type:f.get("entry_type")||"registro",status:f.get("status")||null,event_date:f.get("event_date")||null,body:f.get("body")||null,link_url:f.get("link_url")||null,updated_by:session.user.id};let q=row?supabase.from("entries").update(payload).eq("id",row.id):supabase.from("entries").insert({...payload,created_by:session.user.id});const {error}=await q;if(error)flash(error.message,"error");else{flash("Registro salvo.");renderEntries(slug)}};
 }
 async function renderPlaza(){
- const pm=perms.praca_tripulacao||{}; const {data}=await supabase.from("plaza_posts").select("*").order("created_at",{ascending:false});
- el("content").innerHTML=`<div class="hero"><div><h2>☀️ Praça da Tripulação</h2><p>Trabalho, convivência e boas vibrações: música, mensagem, Instagram, achados, ideias e conquistas.</p></div></div>
- ${pm.can_create?'<div class="card plazaComposer"><h3>Compartilhar com a tripulação</h3><form id="pf"><div class="formgrid"><div><label>Categoria</label><select name="category"><option>Bom dia</option><option>Música</option><option>Vale ver</option><option>Instagram / Reels</option><option>Foto da Expedição</option><option>Ideia</option><option>Fórum</option><option>Conquista</option><option>Mensagem</option></select></div><div><label>Link</label><input name="link_url" type="url" placeholder="https://..."></div><div class="full"><label>Mensagem</label><textarea name="body" required></textarea></div></div><button class="btn sun">Publicar</button></form></div>':""}<div id="posts"></div>`;
+ const pm=perms.praca_tripulacao||{};
+ const {data:posts}=await supabase.from("plaza_posts").select("*").order("created_at",{ascending:false});
+ const ids=(posts||[]).map(p=>p.id);
+ const [{data:comments},{data:reactions}]=ids.length?await Promise.all([
+   supabase.from("plaza_comments").select("*").in("post_id",ids).order("created_at",{ascending:true}),
+   supabase.from("plaza_reactions").select("*").in("post_id",ids)
+ ]):[{data:[]},{data:[]}];
+ el("content").innerHTML=`<div class="hero"><div><h2>☀️ Praça da Tripulação</h2><p>Espaço comum de pertencimento, convivência e circulação: ideias, achados, ODS, reconhecimento, dúvidas e cuidado em rede.</p></div></div>
+ <div class="card plazaFlow"><b>Da Praça ao Diário:</b> observar → compartilhar → discutir → validar → virar rota, evidência ou ação.</div>
+ ${pm.can_create?'<div class="card plazaComposer"><h3>Compartilhar com a tripulação</h3><form id="pf"><div class="formgrid"><div><label>Categoria</label><select name="category"><option>Bom dia</option><option>Ideia</option><option>Achado do território</option><option>ODS em ação</option><option>Sugestão de rota</option><option>Dúvida</option><option>Reconhecimento</option><option>Olha o que encontrei</option><option>Precisamos olhar isso</option><option>Cuidado em rede</option><option>Foto da Expedição</option><option>Vale ver</option></select></div><div><label>Link</label><input name="link_url" type="url" placeholder="https://..."></div><div class="full"><label>Mensagem</label><textarea name="body" required></textarea></div></div><button class="btn sun">Publicar na Praça</button></form></div>':""}<div id="posts"></div>`;
  if(pm.can_create) el("pf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.from("plaza_posts").insert({category:f.get("category"),body:f.get("body"),link_url:f.get("link_url")||null,created_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()};
- el("posts").innerHTML=(data||[]).map(p=>{const own=p.created_by===session.user.id||profile.role==="gat4_admin";return `<article class="entry post"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span></div><p class="author">${esc(profiles[p.created_by]?.display_name||"Tripulante")}</p><p>${esc(p.body).replace(/\n/g,"<br>")}</p>${safeLink(p.link_url)?'<a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(p.link_url))+'">🔗 Abrir conteúdo</a>':""}<div id="pfiles-${p.id}"></div><div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`}).join("")||'<div class="card">A Praça está esperando a primeira mensagem.</div>';
+ el("posts").innerHTML=(posts||[]).map(p=>{
+   const own=p.created_by===session.user.id||profile.role==="gat4_admin";
+   const cs=(comments||[]).filter(x=>x.post_id===p.id), rs=(reactions||[]).filter(x=>x.post_id===p.id);
+   const counts={};rs.forEach(x=>counts[x.reaction]=(counts[x.reaction]||0)+1);
+   const mine=rs.find(x=>x.user_id===session.user.id)?.reaction||"";
+   const react=["❤️ Gostei","👏 Arrasou","💡 Me fez pensar","🌱 ODS","🧭 Vamos por aí"];
+   return `<article class="entry post"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span></div><p class="author">${esc(profiles[p.created_by]?.display_name||"Tripulante")}</p><p>${esc(p.body).replace(/\n/g,"<br>")}</p>${safeLink(p.link_url)?'<a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(p.link_url))+'">🔗 Abrir conteúdo</a>':""}<div id="pfiles-${p.id}"></div>
+   <div class="reactionBar">${react.map(x=>'<button class="reaction '+(mine===x?'selected':'')+'" data-post="'+p.id+'" data-reaction="'+esc(x)+'">'+esc(x)+' '+(counts[x]||'')+'</button>').join("")}</div>
+   <div class="commentList">${cs.map(x=>'<div class="comment"><b>'+esc(profiles[x.created_by]?.display_name||"Tripulante")+'</b><span>'+esc(x.body)+'</span></div>').join("")}</div>
+   ${pm.can_create?'<form class="commentForm" data-post="'+p.id+'"><input name="body" placeholder="Escreva um comentário..." required><button class="btn secondary">Comentar</button></form>':""}
+   <div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`;
+ }).join("")||'<div class="card">A Praça está esperando a primeira mensagem.</div>';
+ document.querySelectorAll(".reaction").forEach(b=>b.onclick=async()=>{const {error}=await supabase.from("plaza_reactions").upsert({post_id:b.dataset.post,user_id:session.user.id,reaction:b.dataset.reaction},{onConflict:"post_id,user_id"});if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".commentForm").forEach(f=>f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const body=String(fd.get("body")||"").trim();if(!body)return;const {error}=await supabase.from("plaza_comments").insert({post_id:f.dataset.post,body,created_by:session.user.id,updated_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".pdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir esta publicação?")){await supabase.from("plaza_posts").delete().eq("id",b.dataset.id);renderPlaza()}});
  document.querySelectorAll(".pupload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"plaza_post",i.dataset.id,"praca_tripulacao").then(renderPlaza));
- (data||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
+ (posts||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
 }
 const reportFields=[["activities","1. Principais atividades realizadas no mês"],["settings_services","2. Cenários, serviços ou espaços envolvidos"],["audiences_quantities","3. Público envolvido e quantitativos"],["goal_objective","4. Meta ou objetivo trabalhado no mês"],["results","5. Principais resultados alcançados"],["indicators","6. Indicadores e números do período"],["articulations","7. Articulações realizadas"],["service_supervisor_participation","8. Participação do orientador de serviço"],["barriers","9. Principais barreiras ou dificuldades"],["strategies","10. Estratégias adotadas para superar as barreiras"],["products","11. Produtos elaborados no mês"],["evidences","12. Evidências e documentos comprobatórios"],["next_steps","13. Próximos passos"]];
 function reportCompletion(r){const done=reportFields.filter(([k])=>String(r?.[k]||"").trim()).length;return {done,total:reportFields.length,pct:Math.round(done/reportFields.length*100)}}
