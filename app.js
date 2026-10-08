@@ -367,7 +367,7 @@ function exportReport(r){let html='<html><meta charset="utf-8"><body><h1>RELATÓ
 async function renderAdmin(){
  if(!adminEditingEnabled()) return navigate("home");
  const [{data:ps},{data:inv}]=await Promise.all([supabase.from("profiles").select("*").order("display_name"),supabase.from("invites").select("*").order("created_at",{ascending:false})]);
- el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Cadastre participantes e atribua o papel correto.</p></div></div>
+ el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Crie e gerencie acessos, vinculando cada pessoa ao papel correto.</p></div></div>
  <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="tutora_andreza_gat4">Tutora Andreza — GAT 4</option><option value="tutora_raquel_gat4">Tutora Raquel — GAT 4</option><option value="tutora_jenifer_gat3">Tutora Jenifer — GAT 3</option><option value="tutora_kristianne_gat3">Tutora Kristianne — GAT 3</option><option value="preceptora_ana_paula_gat4">Preceptora Ana Paula — GAT 4</option><option value="preceptora_sulamita_gat4">Preceptora Sulamita — GAT 4</option><option value="preceptora_heidi_gat3">Preceptora Heidi — GAT 3</option><option value="preceptora_laiane_gat3">Preceptora Laiane — GAT 3</option><option value="orientadora_vera_eixo2">Orientadora Vera Lúcia — Eixo 2</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — leitura geral; edição só no relatório</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
  <div class="card"><h3>Infraestrutura</h3><p>Anexos ficam em bucket privado e obedecem às mesmas permissões.</p><button class="btn secondary" id="initStorage">Ativar anexos</button><hr><h3>Minha senha</h3><form id="pwf"><input name="password" type="password" minlength="8" placeholder="Nova senha" required><button class="btn secondary">Alterar minha senha</button></form></div></div>
  <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td><td><button class="btn secondary profileEdit" data-id="'+p.user_id+'">Corrigir</button></td></tr>').join("")}</tbody></table></div>
@@ -399,7 +399,7 @@ async function renderAdmin(){
     options:{
       shouldCreateUser:true,
       data:{full_name:displayName},
-      emailRedirectTo:location.origin+location.pathname
+      emailRedirectTo:"https://andyportella.github.io/pet-saude-clima-e2g4/"
     }
   });
   if(authError){
