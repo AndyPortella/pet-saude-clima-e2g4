@@ -373,7 +373,47 @@ async function renderAdmin(){
  <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td><td><button class="btn secondary profileEdit" data-id="'+p.user_id+'">Corrigir</button></td></tr>').join("")}</tbody></table></div>
  <div class="card tablewrap"><h3>Convites / pré-cadastros</h3><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead><tbody>${(inv||[]).map(i=>'<tr><td>'+esc(i.display_name||"")+'</td><td>'+esc(i.email)+'</td><td>'+esc(roleLabels[i.role])+'</td></tr>').join("")}</tbody></table></div>`;
  document.querySelectorAll(".profileEdit").forEach(b=>b.onclick=async()=>{const p=(ps||[]).find(x=>x.user_id===b.dataset.id);if(!p)return;const name=prompt("Nome:",p.display_name);if(name===null)return;const role=prompt("Papel: tutora_andreza_gat4, tutora_raquel_gat4, tutora_jenifer_gat3, tutora_kristianne_gat3, preceptora_ana_paula_gat4, preceptora_sulamita_gat4, preceptora_heidi_gat3, preceptora_laiane_gat3, orientadora_vera_eixo2, student ou coordinator_view",p.role);if(role===null)return;const active=confirm("OK = usuário ativo. Cancelar = usuário inativo.");const {error}=await supabase.from("profiles").update({display_name:name.trim()||p.display_name,role,active,updated_at:new Date().toISOString()}).eq("user_id",p.user_id);if(error)flash(error.message,"error");else renderAdmin()});
- el("uf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);el("tempPass").innerHTML='<div class="notice">Criando acesso...</div>';const {data,error}=await supabase.functions.invoke("admin-create-user",{body:{display_name:f.get("display_name"),email:f.get("email"),role:f.get("role")}});let detail=data?.error||"";if(error&&!detail){try{const payload=await error.context?.json();detail=payload?.error||payload?.message||""}catch{}if(!detail)detail=error.message||"Falha ao criar acesso."}if(error||data?.error){el("tempPass").innerHTML='<div class="notice error">'+esc(detail||"Falha ao criar acesso.")+'</div>';return}if(data?.already_existed){el("tempPass").innerHTML='<div class="notice"><b>Acesso já existia e foi habilitado.</b><br>O perfil e as permissões foram sincronizados.</div>'}else{el("tempPass").innerHTML='<div class="notice"><b>Acesso criado.</b><br>Senha temporária: <code>'+esc(data.temporary_password)+'</code><br>Envie esta senha à pessoa por canal privado e peça que ela altere no primeiro acesso.</div>'}setTimeout(()=>renderAdmin(),2500)};
+ el("uf").onsubmit=async e=>{
+  e.preventDefault();
+  const f=new FormData(e.target);
+  const displayName=String(f.get("display_name")||"").trim();
+  const email=String(f.get("email")||"").trim().toLowerCase();
+  const role=String(f.get("role")||"");
+  el("tempPass").innerHTML='<div class="notice">Preparando o acesso...</div>';
+
+  const {error:inviteError}=await supabase.from("invites").upsert({
+    email,
+    display_name:displayName,
+    role,
+    active:true,
+    created_by:session.user.id
+  },{onConflict:"email"});
+
+  if(inviteError){
+    el("tempPass").innerHTML='<div class="notice error">'+esc("Não foi possível registrar o acesso: "+inviteError.message)+'</div>';
+    return;
+  }
+
+  const secondary=createClient(SUPABASE_URL,SUPABASE_KEY,{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+  });
+  const {error:authError}=await secondary.auth.signInWithOtp({
+    email,
+    options:{
+      shouldCreateUser:true,
+      data:{full_name:displayName},
+      emailRedirectTo:location.origin+location.pathname
+    }
+  });
+
+  if(authError){
+    el("tempPass").innerHTML='<div class="notice error">'+esc("O perfil foi preparado, mas o convite de acesso falhou: "+authError.message)+'</div>';
+    return;
+  }
+
+  el("tempPass").innerHTML='<div class="notice"><b>Convite enviado.</b><br>'+esc(displayName)+' receberá no e-mail um link seguro para entrar. O perfil e as permissões são vinculados automaticamente ao e-mail cadastrado.</div>';
+  setTimeout(()=>renderAdmin(),3500);
+};
  el("initStorage").onclick=async()=>{const {data,error}=await supabase.functions.invoke("ensure-storage");if(error||data?.error)flash(data?.error||error.message,"error");else flash("Anexos privados ativados.")};
  el("pwf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.auth.updateUser({password:f.get("password")});if(error)flash(error.message,"error");else flash("Senha alterada.")};
 }
