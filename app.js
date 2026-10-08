@@ -127,8 +127,28 @@ async function renderCrew(){
  const {data,error}=await supabase.from("crew_members").select("*").order("sort_order").order("display_name");
  if(error){flash(error.message,"error");return}
  const rows=data||[];
- el("content").innerHTML=`<div class="hero"><div><h2>👥 Tripulação</h2><p>Composição real do Eixo 2: GAT 3 + GAT 4, preceptoras, orientadora e estudantes.</p></div></div>
- <div class="card tablewrap"><table><thead><tr><th>Nome</th><th>Vínculo</th><th>Papel</th><th>Status</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.display_name)}</b></td><td>${esc(x.gat)}</td><td>${esc(x.participant_role)}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`;
+ el("content").innerHTML=`<div class="hero"><div><h2>👥 Tripulação</h2><p>Composição real do Eixo 2: GAT 3 + GAT 4, preceptoras, orientadora e estudantes.</p></div>${adminEditingEnabled()?'<button class="btn" id="addCrew">+ Incluir participante</button>':""}</div>
+ <div id="crewEditor"></div>
+ <div class="card tablewrap"><table><thead><tr><th>Nome</th><th>Vínculo</th><th>Papel</th><th>Status</th>${adminEditingEnabled()?"<th>Ações</th>":""}</tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.display_name)}</b></td><td>${esc(x.gat)}</td><td>${esc(x.participant_role)}</td><td>${esc(x.status)}</td>${adminEditingEnabled()?`<td><button class="btn secondary crewEdit" data-id="${x.id}">Corrigir</button><button class="btn warn crewDel" data-id="${x.id}">Excluir</button></td>`:""}</tr>`).join("")}</tbody></table></div>`;
+ if(adminEditingEnabled()){
+  el("addCrew").onclick=()=>crewForm(null);
+  document.querySelectorAll(".crewEdit").forEach(b=>b.onclick=()=>crewForm(rows.find(x=>x.id===b.dataset.id)));
+  document.querySelectorAll(".crewDel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir este participante da lista?")){const {error}=await supabase.from("crew_members").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderCrew()}});
+ }
+}
+function crewForm(row){
+ el("crewEditor").innerHTML=`<div class="card"><h3>${row?"Corrigir participante":"Incluir participante"}</h3><form id="crewForm"><div class="formgrid">
+ <div><label>Nome</label><input name="display_name" required value="${esc(row?.display_name||"")}"></div>
+ <div><label>Eixo</label><input name="eixo" required value="${esc(row?.eixo||"Eixo 2")}"></div>
+ <div><label>GAT / vínculo</label><input name="gat" required value="${esc(row?.gat||"GAT 4")}"></div>
+ <div><label>Papel</label><input name="participant_role" required value="${esc(row?.participant_role||"")}"></div>
+ <div><label>Status</label><input name="status" required value="${esc(row?.status||"ativo")}"></div>
+ <div><label>Ordem</label><input name="sort_order" type="number" value="${row?.sort_order??100}"></div>
+ <div class="full"><label>Seção</label><input name="section" value="${esc(row?.section||"")}"></div>
+ </div><div class="actions"><button class="btn">Salvar alterações</button><button type="button" class="btn secondary" id="cancelCrew">Cancelar</button></div></form></div>`;
+ el("cancelCrew").onclick=()=>el("crewEditor").innerHTML="";
+ el("crewForm").onsubmit=async ev=>{ev.preventDefault();const fd=new FormData(ev.target);const payload={display_name:fd.get("display_name"),eixo:fd.get("eixo"),gat:fd.get("gat"),participant_role:fd.get("participant_role"),status:fd.get("status"),sort_order:Number(fd.get("sort_order")||100),section:fd.get("section")||null,updated_at:new Date().toISOString()};const q=row?supabase.from("crew_members").update(payload).eq("id",row.id):supabase.from("crew_members").insert(payload);const {error}=await q;if(error)flash(error.message,"error");else{flash("Tripulação atualizada.");renderCrew()}};
+ setTimeout(()=>el("crewEditor")?.scrollIntoView({behavior:"smooth",block:"start"}),0);
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
@@ -219,13 +239,16 @@ async function renderPlaza(){
    const react=["❤️ Gostei","👏 Arrasou","💡 Me fez pensar","🌱 ODS","🧭 Vamos por aí"];
    return `<article class="entry post"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span></div><p class="author">${esc(profiles[p.created_by]?.display_name||"Tripulante")}</p><p>${esc(p.body).replace(/\n/g,"<br>")}</p>${safeLink(p.link_url)?'<a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(p.link_url))+'">🔗 Abrir conteúdo</a>':""}<div id="pfiles-${p.id}"></div>
    <div class="reactionBar">${react.map(x=>'<button class="reaction '+(mine===x?'selected':'')+'" data-post="'+p.id+'" data-reaction="'+esc(x)+'">'+esc(x)+' '+(counts[x]||'')+'</button>').join("")}</div>
-   <div class="commentList">${cs.map(x=>'<div class="comment"><b>'+esc(profiles[x.created_by]?.display_name||"Tripulante")+'</b><span>'+esc(x.body)+'</span></div>').join("")}</div>
+   <div class="commentList">${cs.map(x=>{const canEditComment=x.created_by===session.user.id||adminEditingEnabled();return '<div class="comment"><b>'+esc(profiles[x.created_by]?.display_name||"Tripulante")+'</b><span>'+esc(x.body)+'</span>'+(canEditComment?'<span class="commentActions"><button class="btn secondary cedit" data-id="'+x.id+'">Corrigir</button><button class="btn warn cdel" data-id="'+x.id+'">Excluir</button></span>':"")+'</div>'}).join("")}</div>
    ${pm.can_create?'<form class="commentForm" data-post="'+p.id+'"><input name="body" placeholder="Escreva um comentário..." required><button class="btn secondary">Comentar</button></form>':""}
-   <div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`;
+   <div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn secondary pedit" data-id="'+p.id+'">Corrigir</button><button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`;
  }).join("")||'<div class="card">A Praça está esperando a primeira mensagem.</div>';
  document.querySelectorAll(".reaction").forEach(b=>b.onclick=async()=>{const {error}=await supabase.from("plaza_reactions").upsert({post_id:b.dataset.post,user_id:session.user.id,reaction:b.dataset.reaction},{onConflict:"post_id,user_id"});if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".commentForm").forEach(f=>f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const body=String(fd.get("body")||"").trim();if(!body)return;const {error}=await supabase.from("plaza_comments").insert({post_id:f.dataset.post,body,created_by:session.user.id,updated_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()});
- document.querySelectorAll(".pdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir esta publicação?")){await supabase.from("plaza_posts").delete().eq("id",b.dataset.id);renderPlaza()}});
+ document.querySelectorAll(".pedit").forEach(b=>b.onclick=async()=>{const p=(posts||[]).find(x=>x.id===b.dataset.id);if(!p)return;const body=prompt("Corrigir publicação:",p.body);if(body===null)return;const category=prompt("Categoria:",p.category);if(category===null)return;const link=prompt("Link (opcional):",p.link_url||"");if(link===null)return;const {error}=await supabase.from("plaza_posts").update({body,category,link_url:link||null,updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",p.id);if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".cedit").forEach(b=>b.onclick=async()=>{const x=(comments||[]).find(y=>y.id===b.dataset.id);if(!x)return;const body=prompt("Corrigir comentário:",x.body);if(body===null)return;const {error}=await supabase.from("plaza_comments").update({body,updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",x.id);if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".cdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir este comentário?")){const {error}=await supabase.from("plaza_comments").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
+ document.querySelectorAll(".pdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir esta publicação?")){const {error}=await supabase.from("plaza_posts").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
  document.querySelectorAll(".pupload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"plaza_post",i.dataset.id,"praca_tripulacao").then(renderPlaza));
  (posts||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
 }
@@ -252,8 +275,9 @@ async function renderAdmin(){
  el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Cadastre participantes e atribua o papel correto.</p></div></div>
  <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora — Cassino dos Oficiais</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — visualização/exportação</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
  <div class="card"><h3>Infraestrutura</h3><p>Anexos ficam em bucket privado e obedecem às mesmas permissões.</p><button class="btn secondary" id="initStorage">Ativar anexos</button><hr><h3>Minha senha</h3><form id="pwf"><input name="password" type="password" minlength="8" placeholder="Nova senha" required><button class="btn secondary">Alterar minha senha</button></form></div></div>
- <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td></tr>').join("")}</tbody></table></div>
+ <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td><td><button class="btn secondary profileEdit" data-id="'+p.user_id+'">Corrigir</button></td></tr>').join("")}</tbody></table></div>
  <div class="card tablewrap"><h3>Convites / pré-cadastros</h3><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead><tbody>${(inv||[]).map(i=>'<tr><td>'+esc(i.display_name||"")+'</td><td>'+esc(i.email)+'</td><td>'+esc(roleLabels[i.role])+'</td></tr>').join("")}</tbody></table></div>`;
+ document.querySelectorAll(".profileEdit").forEach(b=>b.onclick=async()=>{const p=(ps||[]).find(x=>x.user_id===b.dataset.id);if(!p)return;const name=prompt("Nome:",p.display_name);if(name===null)return;const role=prompt("Papel: gat4_admin, eixo2_editor, sus_editor, student ou coordinator_view",p.role);if(role===null)return;const active=confirm("OK = usuário ativo. Cancelar = usuário inativo.");const {error}=await supabase.from("profiles").update({display_name:name.trim()||p.display_name,role,active,updated_at:new Date().toISOString()}).eq("user_id",p.user_id);if(error)flash(error.message,"error");else renderAdmin()});
  el("uf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {data,error}=await supabase.functions.invoke("admin-create-user",{body:{display_name:f.get("display_name"),email:f.get("email"),role:f.get("role")}});if(error||data?.error){el("tempPass").innerHTML='<div class="notice error">'+esc(data?.error||error.message)+'</div>'}else{el("tempPass").innerHTML='<div class="notice"><b>Acesso criado.</b><br>Senha temporária: <code>'+esc(data.temporary_password)+'</code><br>Envie esta senha à pessoa por canal privado e peça que ela altere no primeiro acesso.</div>';renderAdmin()}};
  el("initStorage").onclick=async()=>{const {data,error}=await supabase.functions.invoke("ensure-storage");if(error||data?.error)flash(data?.error||error.message,"error");else flash("Anexos privados ativados.")};
  el("pwf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.auth.updateUser({password:f.get("password")});if(error)flash(error.message,"error");else flash("Senha alterada.")};
@@ -264,8 +288,20 @@ async function uploadFile(file,parentKind,parentId,spaceSlug){
  const {error:e2}=await supabase.from("attachments").insert({space_slug:spaceSlug,parent_kind:parentKind,parent_id:parentId,storage_path:path,file_name:file.name,mime_type:file.type,size_bytes:file.size,uploaded_by:session.user.id});if(e2)flash(e2.message,"error");else flash("Arquivo anexado.");
 }
 async function loadAttachments(kind,id,target){
- const node=el(target);if(!node)return;const {data}=await supabase.from("attachments").select("*").eq("parent_kind",kind).eq("parent_id",id).order("created_at");if(!data?.length)return;
- const parts=[];for(const a of data){const {data:s}=await supabase.storage.from("e2g4-files").createSignedUrl(a.storage_path,300);if(s?.signedUrl)parts.push('<a class="file link" target="_blank" rel="noopener" href="'+esc(s.signedUrl)+'">📎 '+esc(a.file_name)+'</a>')}node.innerHTML=parts.join("<br>");
+ const node=el(target);if(!node)return;
+ const {data,error}=await supabase.from("attachments").select("*").eq("parent_kind",kind).eq("parent_id",id).order("created_at");
+ if(error){node.innerHTML='<span class="notice error">'+esc(error.message)+'</span>';return}
+ if(!data?.length){node.innerHTML="";return}
+ const parts=[];
+ for(const a of data){
+  const {data:signed}=await supabase.storage.from("e2g4-files").createSignedUrl(a.storage_path,300);
+  const canEdit=adminEditingEnabled()||perms[a.space_slug]?.can_update;
+  const canDelete=adminEditingEnabled()||perms[a.space_slug]?.can_delete||a.uploaded_by===session.user.id;
+  parts.push(`<div class="fileRow">${signed?.signedUrl?'<a class="file link" target="_blank" rel="noopener" href="'+esc(signed.signedUrl)+'">📎 '+esc(a.file_name)+'</a>':'📎 '+esc(a.file_name)}<span class="fileActions">${canEdit?'<button class="btn secondary fileRename" data-id="'+a.id+'" data-name="'+esc(a.file_name)+'">Renomear</button>':""}${canDelete?'<button class="btn warn fileDelete" data-id="'+a.id+'" data-path="'+esc(a.storage_path)+'">Excluir</button>':""}</span></div>`);
+ }
+ node.innerHTML=parts.join("");
+ node.querySelectorAll(".fileRename").forEach(b=>b.onclick=async()=>{const name=prompt("Novo nome do arquivo:",b.dataset.name);if(name===null||!name.trim())return;const {error}=await supabase.from("attachments").update({file_name:name.trim()}).eq("id",b.dataset.id);if(error)flash(error.message,"error");else{flash("Nome do arquivo atualizado.");loadAttachments(kind,id,target)}});
+ node.querySelectorAll(".fileDelete").forEach(b=>b.onclick=async()=>{if(!confirm("Excluir este anexo?"))return;const {error:se}=await supabase.storage.from("e2g4-files").remove([b.dataset.path]);if(se){flash(se.message,"error");return}const {error}=await supabase.from("attachments").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else{flash("Anexo excluído.");loadAttachments(kind,id,target)}});
 }
 function subscribeRealtime(){["entries","monthly_reports","plaza_posts","plaza_comments","plaza_reactions","attachments","crew_members"].forEach(t=>supabase.channel("rt-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{const active=document.querySelector(".navbtn.active")?.dataset.view;if(active)navigate(active)}).subscribe())}
 start();
