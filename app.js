@@ -76,6 +76,9 @@ async function navigate(view){
 
 function editorStamp(row){
  if(!row?.updated_by||!row?.updated_at)return "";
+ const created=row?.created_at?new Date(row.created_at).getTime():0;
+ const updated=new Date(row.updated_at).getTime();
+ if(created&&Math.abs(updated-created)<2000)return "";
  const who=profiles[row.updated_by]?.display_name||"Tutoria";
  const when=new Date(row.updated_at).toLocaleString("pt-BR");
  return `<span class="editStamp">✎ Editado por ${esc(who)} · ${esc(when)}</span>`;
@@ -136,6 +139,7 @@ async function renderHome(){
  <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> ${esc(p.cabin_text)} <b>Eixo 2:</b> ${esc(p.eixo2_text)} <b>Cassino dos Oficiais:</b> ${esc(p.cassino_text)} <b>Praça da Tripulação:</b> ${esc(p.praca_text)} <b>Coordenação:</b> ${esc(p.coordination_text)}</p></div>
  <div id="panelEditor"></div>`;
  if(adminEditingEnabled()) el("editPanel").onclick=()=>renderPanelEditor(p);
+ const compass=document.querySelector(".heroCompass");if(compass&&!matchMedia("(prefers-reduced-motion: reduce)").matches)compass.animate([{transform:"translateY(0) rotate(-4deg)"},{transform:"translateY(-8px) rotate(4deg)"},{transform:"translateY(0) rotate(-4deg)"}],{duration:3200,iterations:Infinity,easing:"ease-in-out"});
 }
 function renderPanelEditor(p){
  el("panelEditor").innerHTML=`<div class="card"><h3>Editar texto do Painel</h3><form id="panelForm"><div class="formgrid">
@@ -291,6 +295,7 @@ async function renderPlanning(){
  if(el("newPostit"))el("newPostit").onclick=()=>entryForm(slug,null);
  document.querySelectorAll(".calendarDay[data-date]").forEach(b=>b.onclick=()=>{if(pm.can_create||adminEditingEnabled()){entryForm(slug,{event_date:b.dataset.date,entry_type:"post-it",title:"",body:"",metadata:{state:"planejado"}});setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth"}),0)}});
  renderEntryList(slug,notes||[],pm);
+ const reminder=document.querySelector(".postitReminder");if(reminder&&!matchMedia("(prefers-reduced-motion: reduce)").matches)reminder.animate([{transform:"scale(1)"},{transform:"scale(1.015)"},{transform:"scale(1)"}],{duration:1800,iterations:3,easing:"ease-in-out"});
 }
 function renderCommentThread(comments,reactions,parent=null,depth=0){
  const list=(comments||[]).filter(x=>(x.parent_comment_id||null)===parent);
