@@ -132,7 +132,7 @@ async function renderCrew(){
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
- let q=supabase.from("entries").select("*").eq("space_slug",slug); const chronological=["rota_registros","atividades","eixo2","registros_bordo"].includes(slug); q=chronological?q.order("event_date",{ascending:true,nullsFirst:false}).order("created_at",{ascending:true}):q.order("created_at",{ascending:false}); const {data:raw}=await q; const data=(raw||[]).sort((a,b)=>{if(slug!=="eixo2")return 0; const da=a.event_date||"9999-12-31",db=b.event_date||"9999-12-31"; if(da!==db)return da.localeCompare(db); return Number(a.metadata?.sequence||0)-Number(b.metadata?.sequence||0)});
+ let q=supabase.from("entries").select("*").eq("space_slug",slug).order("event_date",{ascending:false,nullsFirst:false}).order("created_at",{ascending:false}); const {data:raw}=await q; const data=(raw||[]).sort((a,b)=>{const da=a.event_date||"",db=b.event_date||""; if(da!==db)return db.localeCompare(da); if(slug==="eixo2")return Number(b.metadata?.sequence||0)-Number(a.metadata?.sequence||0); return new Date(b.created_at||0)-new Date(a.created_at||0)});
  el("content").innerHTML=`<div class="hero"><div><h2>${iconFor(slug)} ${esc(space?.title||slug)}</h2><p>${esc(space?.description||"")}</p></div><div class="actions">${pm.can_create?'<button class="btn" id="addEntry">+ Incluir</button>':""}</div></div><div id="entryForm"></div><div id="entryList"></div>`;
  if(pm.can_create) el("addEntry").onclick=()=>entryForm(slug,null);
  renderEntryList(slug,data||[],pm);
