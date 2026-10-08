@@ -77,11 +77,12 @@ async function renderHome(){
   eixo2_text:"GAT 4 + GAT 3.",
   cassino_text:"preceptoras + orientadora de serviço + tutoria autorizada.",
   praca_text:"espaço comum de pertencimento, convivência e circulação de ideias.",
-  coordination_text:"visualiza e exporta, sem editar."
+  coordination_text:"visualiza e exporta, sem editar.",
+  next_milestones:"10/10/2026 — Entrega do relatório mensal referente a setembro.\n16/10/2026 — Reunião geral do PET-Saúde: Clima para apresentação das propostas em construção pelos GTs."
  };
  el("content").innerHTML=`<div class="hero"><div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div>${profile.role==="gat4_admin"?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
  <div class="grid"><div class="stat"><b>${marcos||0}</b>marcos da rota</div><div class="stat"><b>${gat4||0}</b>participantes GAT 4</div><div class="stat"><b>${registros||0}</b>registros de bordo</div><div class="stat"><b>${gestao||0}</b>itens de gestão</div></div>
- <div class="card"><h3>Situação atual</h3><p><b>Fase:</b> ${esc(p.phase)}. <b>GAT em foco:</b> ${esc(p.focus)}. <b>Integração:</b> ${esc(p.integration)}. <b>Próxima atracação:</b> ${esc(p.next_attraction)}.</p></div>
+ <div class="card"><h3>Situação atual</h3><p><b>Fase:</b> ${esc(p.phase)}. <b>GAT em foco:</b> ${esc(p.focus)}. <b>Integração:</b> ${esc(p.integration)}.</p></div><div class="card"><h3>Próximos marcos</h3><p>${esc(p.next_milestones||"").replace(/\n/g,"<br>")}</p></div>
  <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> ${esc(p.cabin_text)} <b>Eixo 2:</b> ${esc(p.eixo2_text)} <b>Cassino dos Oficiais:</b> ${esc(p.cassino_text)} <b>Praça da Tripulação:</b> ${esc(p.praca_text)} <b>Coordenação:</b> ${esc(p.coordination_text)}</p></div>
  <div id="panelEditor"></div>`;
  if(profile.role==="gat4_admin") el("editPanel").onclick=()=>renderPanelEditor(p);
@@ -93,7 +94,7 @@ function renderPanelEditor(p){
  <div class="full"><label>Texto de abertura</label><textarea name="intro">${esc(p.intro)}</textarea></div>
  <div class="full"><label>GAT em foco</label><input name="focus" value="${esc(p.focus)}"></div>
  <div><label>Integração</label><input name="integration" value="${esc(p.integration)}"></div>
- <div><label>Próxima atracação</label><input name="next_attraction" value="${esc(p.next_attraction)}"></div>
+ <div class="full"><label>Próximos marcos</label><textarea name="next_milestones">${esc(p.next_milestones||"")}</textarea></div>
  <div class="full"><label>Cabine GAT 4</label><input name="cabin_text" value="${esc(p.cabin_text)}"></div>
  <div class="full"><label>Eixo 2</label><input name="eixo2_text" value="${esc(p.eixo2_text)}"></div>
  <div class="full"><label>Cassino dos Oficiais</label><input name="cassino_text" value="${esc(p.cassino_text)}"></div>
@@ -104,7 +105,7 @@ function renderPanelEditor(p){
  el("panelForm").onsubmit=async e=>{
   e.preventDefault(); const fd=new FormData(e.target);
   const payload={id:"home",updated_at:new Date().toISOString(),updated_by:session.user.id};
-  ["title","intro","phase","focus","integration","next_attraction","cabin_text","eixo2_text","cassino_text","praca_text","coordination_text"].forEach(k=>payload[k]=fd.get(k)||"");
+  ["title","intro","phase","focus","integration","next_milestones","cabin_text","eixo2_text","cassino_text","praca_text","coordination_text"].forEach(k=>payload[k]=fd.get(k)||"");
   const {error}=await supabase.from("panel_settings").upsert(payload);
   if(error) flash(error.message,"error"); else {flash("Painel atualizado.");renderHome()}
  };
