@@ -221,7 +221,7 @@ function renderEntryList(slug,rows,pm){
  document.querySelectorAll(".move.down").forEach(b=>b.onclick=async()=>{const {error}=await supabase.rpc("move_entry",{p_entry_id:b.dataset.id,p_direction:1});if(error)flash(error.message,"error");else renderEntries(slug)});
  document.querySelectorAll(".edit").forEach(b=>b.onclick=async()=>{const {data,error}=await supabase.from("entries").select("*").eq("id",b.dataset.id).single();if(error){flash(error.message,"error");return}entryForm(slug,data);setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"}),0)});
  document.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{if(confirm("Excluir somente este registro?")){const {error}=await supabase.from("entries").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderEntries(slug)}});
- document.querySelectorAll(".upload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"entry",i.dataset.parent,i.dataset.space).then(()=>renderEntries(slug)));
+ document.querySelectorAll(".upload").forEach(i=>i.onchange=async()=>{const ok=await uploadFile(i.files[0],"entry",i.dataset.parent,i.dataset.space);if(ok)renderEntries(slug)});
  bindHistoryButtons();
  rows.forEach(r=>loadAttachments("entry",r.id,"files-"+r.id));
 }
@@ -339,7 +339,7 @@ async function renderPlaza(){
  document.querySelectorAll(".cedit").forEach(b=>b.onclick=async()=>{const x=(comments||[]).find(y=>y.id===b.dataset.id);if(!x)return;const body=prompt("Corrigir comentário:",x.body);if(body===null)return;const {error}=await supabase.from("plaza_comments").update({body,updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",x.id);if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".cdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir este comentário?")){const {error}=await supabase.from("plaza_comments").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
  document.querySelectorAll(".pdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir esta publicação?")){const {error}=await supabase.from("plaza_posts").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
- document.querySelectorAll(".pupload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"plaza_post",i.dataset.id,"praca_tripulacao").then(renderPlaza));
+ document.querySelectorAll(".pupload").forEach(i=>i.onchange=async()=>{const ok=await uploadFile(i.files[0],"plaza_post",i.dataset.id,"praca_tripulacao");if(ok)renderPlaza()});
  bindHistoryButtons();
  (posts||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
 }
@@ -376,9 +376,19 @@ async function renderAdmin(){
  el("pwf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.auth.updateUser({password:f.get("password")});if(error)flash(error.message,"error");else flash("Senha alterada.")};
 }
 async function uploadFile(file,parentKind,parentId,spaceSlug){
- if(!file)return; const path=`${spaceSlug}/${session.user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
- const {error}=await supabase.storage.from("e2g4-files").upload(path,file); if(error){flash("Anexo: "+error.message,"error");return}
- const {error:e2}=await supabase.from("attachments").insert({space_slug:spaceSlug,parent_kind:parentKind,parent_id:parentId,storage_path:path,file_name:file.name,mime_type:file.type,size_bytes:file.size,uploaded_by:session.user.id});if(e2)flash(e2.message,"error");else flash("Arquivo anexado.");
+ if(!file)return false;
+ if(file.size>20*1024*1024){flash("O arquivo excede o limite de 20 MB.","error");return false}
+ const path=`${spaceSlug}/${session.user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+ const {error}=await supabase.storage.from("e2g4-files").upload(path,file);
+ if(error){flash("Não foi possível anexar: "+error.message,"error");return false}
+ const {error:e2}=await supabase.from("attachments").insert({space_slug:spaceSlug,parent_kind:parentKind,parent_id:parentId,storage_path:path,file_name:file.name,mime_type:file.type||null,size_bytes:file.size,uploaded_by:session.user.id});
+ if(e2){
+  await supabase.storage.from("e2g4-files").remove([path]);
+  flash("O arquivo foi enviado, mas o registro do anexo falhou: "+e2.message,"error");
+  return false;
+ }
+ flash("Arquivo anexado com sucesso.");
+ return true;
 }
 async function loadAttachments(kind,id,target){
  const node=el(target);if(!node)return;
