@@ -3,7 +3,7 @@ const SUPABASE_URL="https://wyxeluofzyvbbihikrct.supabase.co";
 const SUPABASE_KEY="sb_publishable_RL1JIU9dK6hqpCq_nMUxXA_1QXGQikz";
 const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
 
-const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / Cassino dos Oficiais",student:"Estudante",coordinator_view:"Coordenação — relatório mensal"};
+const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / Cassino dos Oficiais",student:"Estudante",coordinator_view:"Coordenação — leitura geral"};
 const statusLabels={planejado:"Planejado",em_andamento:"Em andamento",pendente:"Pendente",concluido:"Concluído",suspenso:"Suspenso"};
 let session=null,profile=null,spaces=[],perms={},profiles={},previewRole=null,auditOverlay=true,planningCursor=new Date();
 
@@ -24,7 +24,7 @@ async function start(){
  const {data}=await supabase.auth.getSession(); session=data.session;
  if(!session) return renderLogin();
  await loadIdentity(); if(!profile) return renderNoAccess();
- await loadBase(); renderShell(); navigate(profile.role==="coordinator_view"?"relatorio_mensal":"home");
+ await loadBase(); renderShell(); navigate("home");
  subscribeRealtime();
 }
 function renderLogin(){
@@ -50,16 +50,16 @@ async function applyPreviewRole(role){
  const targetRole=previewRole||profile.role;
  const {data:p}=await supabase.from("role_permissions").select("*").eq("role",targetRole);
  perms={}; (p||[]).forEach(x=>perms[x.space_slug]=x);
- renderShell(); navigate((previewRole||profile.role)==="coordinator_view"?"relatorio_mensal":"home");
+ renderShell(); navigate("home");
 }
 function adminEditingEnabled(){return profile?.role==="gat4_admin"&&(!previewRole||auditOverlay)}
 function renderShell(){
  const visibleSpaces=spaces.filter(s=>perms[s.slug]?.can_view===true);
  const shownRole=previewRole||profile.role;
- const previewControl=profile.role==="gat4_admin"?`<div class="previewControl"><label for="previewRole">Ver como</label><select id="previewRole"><option value="">Minha visão — Tutoria GAT 4</option><option value="eixo2_editor" ${previewRole==="eixo2_editor"?"selected":""}>Tutoria Eixo 2</option><option value="sus_editor" ${previewRole==="sus_editor"?"selected":""}>Preceptora / Orientadora</option><option value="student" ${previewRole==="student"?"selected":""}>Estudante</option><option value="coordinator_view" ${previewRole==="coordinator_view"?"selected":""}>Coordenação — relatório mensal</option></select></div>`:"";
+ const previewControl=profile.role==="gat4_admin"?`<div class="previewControl"><label for="previewRole">Ver como</label><select id="previewRole"><option value="">Minha visão — Tutoria GAT 4</option><option value="eixo2_editor" ${previewRole==="eixo2_editor"?"selected":""}>Tutoria Eixo 2</option><option value="sus_editor" ${previewRole==="sus_editor"?"selected":""}>Preceptora / Orientadora</option><option value="student" ${previewRole==="student"?"selected":""}>Estudante</option><option value="coordinator_view" ${previewRole==="coordinator_view"?"selected":""}>Coordenação — leitura geral</option></select></div>`:"";
  document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox">${previewControl}<span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[shownRole])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
  ${previewRole?`<div class="previewBanner">👁 Você está visualizando o Diário como <b>${esc(roleLabels[previewRole])}</b>. <span>${auditOverlay?"Ferramentas da tutoria estão visíveis para auditoria.":"Visão limpa, como esse perfil realmente vê."}</span><button class="btn secondary" id="toggleAudit">${auditOverlay?"Ocultar ferramentas da tutoria":"Mostrar ferramentas da tutoria"}</button><button class="btn secondary" id="exitPreview">Voltar à minha visão</button></div>`:""}
- <div class="layout"><aside class="sidebar" id="nav">${shownRole==="coordinator_view"?"":'<button class="navbtn" data-view="home">🏠 Painel</button>'}
+ <div class="layout"><aside class="sidebar" id="nav"><button class="navbtn" data-view="home">🏠 Painel</button>
  ${visibleSpaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
  ${adminEditingEnabled()?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
  <main class="main"><div id="flash"></div><div id="content"></div></main></div></div>`;
@@ -368,7 +368,7 @@ async function renderAdmin(){
  if(!adminEditingEnabled()) return navigate("home");
  const [{data:ps},{data:inv}]=await Promise.all([supabase.from("profiles").select("*").order("display_name"),supabase.from("invites").select("*").order("created_at",{ascending:false})]);
  el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Cadastre participantes e atribua o papel correto.</p></div></div>
- <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora — Cassino dos Oficiais</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — somente relatório mensal</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
+ <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora — Cassino dos Oficiais</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — leitura geral; edição só no relatório</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
  <div class="card"><h3>Infraestrutura</h3><p>Anexos ficam em bucket privado e obedecem às mesmas permissões.</p><button class="btn secondary" id="initStorage">Ativar anexos</button><hr><h3>Minha senha</h3><form id="pwf"><input name="password" type="password" minlength="8" placeholder="Nova senha" required><button class="btn secondary">Alterar minha senha</button></form></div></div>
  <div class="card tablewrap"><h3>Usuários ativos</h3><table><thead><tr><th>Nome</th><th>Papel</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>${(ps||[]).map(p=>'<tr><td>'+esc(p.display_name)+'</td><td>'+esc(roleLabels[p.role])+'</td><td>'+(p.active?"Sim":"Não")+'</td><td><button class="btn secondary profileEdit" data-id="'+p.user_id+'">Corrigir</button></td></tr>').join("")}</tbody></table></div>
  <div class="card tablewrap"><h3>Convites / pré-cadastros</h3><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead><tbody>${(inv||[]).map(i=>'<tr><td>'+esc(i.display_name||"")+'</td><td>'+esc(i.email)+'</td><td>'+esc(roleLabels[i.role])+'</td></tr>').join("")}</tbody></table></div>`;
