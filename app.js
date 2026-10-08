@@ -32,8 +32,11 @@ function renderLogin(){
  <div style="font-size:36px">🧭</div><h1>Expedição Mauá</h1><p>Diário de Bordo colaborativo — PET-Saúde: Clima · Eixo 2 · GAT 4 + GAT 3</p>
  <div id="loginmsg"></div><form id="loginform"><label>E-mail</label><input name="email" type="email" required>
  <label>Senha</label><input name="password" type="password" required><button class="btn">Entrar</button></form>
+ <div style="margin:14px 0;text-align:center;color:var(--muted);font-size:12px">ou</div>
+ <form id="magicform"><label>E-mail</label><input name="email" type="email" required placeholder="seu e-mail institucional"><button class="btn secondary">Receber link de acesso por e-mail</button></form>
  <p style="color:var(--muted);font-size:13px">O acesso é criado pela administração do GAT 4.</p></div></div>`;
  el("loginform").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.auth.signInWithPassword({email:f.get("email"),password:f.get("password")});if(error){el("loginmsg").innerHTML='<div class="notice error">'+esc(error.message)+'</div>'}else location.reload()};
+ el("magicform").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const email=String(f.get("email")||"").trim().toLowerCase();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:"https://andyportella.github.io/pet-saude-clima-e2g4/"}});el("loginmsg").innerHTML=error?'<div class="notice error">'+esc(error.message)+'</div>':'<div class="notice"><b>Link enviado.</b><br>Abra o e-mail e use o link recebido para entrar no Diário de Bordo.</div>'};
 }
 async function loadIdentity(){const {data}=await supabase.from("profiles").select("*").eq("user_id",session.user.id).maybeSingle();profile=data}
 function renderNoAccess(){document.getElementById("app").innerHTML=`<div class="loginwrap"><div class="login"><h1>Acesso não habilitado</h1><p>Seu login existe, mas ainda não possui perfil ativo no Eixo 2.</p><button class="btn" id="logout">Sair</button></div></div>`;el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload())}
