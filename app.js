@@ -13,7 +13,14 @@ const fmt=d=>d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"";
 const safeLink=u=>{try{const x=new URL(u);return ["http:","https:"].includes(x.protocol)?x.href:""}catch{return""}};
 function flash(msg,type="ok"){const n=document.createElement("div");n.className="notice "+type;n.textContent=msg;el("flash")?.append(n);setTimeout(()=>n.remove(),5000)}
 
+function ensureAuditStyles(){
+ if(document.getElementById("auditStyles"))return;
+ const s=document.createElement("style");s.id="auditStyles";
+ s.textContent=".previewBanner{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 18px;background:#fff8d7;border-bottom:1px solid var(--line)}.editStamp{font-size:11px;color:var(--muted);font-weight:700}.modalBackdrop{position:fixed;inset:0;background:rgba(16,34,29,.45);display:grid;place-items:center;z-index:100;padding:20px}.modalCard{width:min(680px,96vw);max-height:88vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}.modalCard.wide{width:min(1100px,96vw)}.historyGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.historyGrid pre{white-space:pre-wrap;word-break:break-word;background:#f6f3e8;padding:10px;border-radius:10px;font-size:11px}.calendarWeek,.calendarGrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.calendarDay{min-height:100px;border:1px solid var(--line);border-radius:12px;background:white;padding:8px;text-align:left;display:flex;flex-direction:column;gap:5px}.calendarDay.empty{background:transparent}.calendarItem{font-size:11px;background:#edf5f2;border-radius:7px;padding:4px 5px}.calendarToolbar{display:flex;justify-content:center;align-items:center;gap:12px;margin:14px 0}.postitReminder{display:grid;gap:5px;background:#fff1a8;border:1px solid #e2c95a;padding:14px 16px;border-radius:8px;margin-bottom:16px}.commentMiniActions{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.miniBtn{border:0;background:transparent;padding:3px 6px;border-radius:8px;cursor:pointer}.miniBtn.selected{background:#e9f4f0}.heroCompass{font-size:60px}@media(max-width:760px){.historyGrid{grid-template-columns:1fr}.calendarDay{min-height:82px}}";
+ document.head.appendChild(s);
+}
 async function start(){
+ ensureAuditStyles();
  const {data}=await supabase.auth.getSession(); session=data.session;
  if(!session) return renderLogin();
  await loadIdentity(); if(!profile) return renderNoAccess();
