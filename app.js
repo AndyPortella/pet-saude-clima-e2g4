@@ -381,16 +381,13 @@ async function renderAdmin(){
   const role=String(f.get("role")||"");
   el("tempPass").innerHTML='<div class="notice">Preparando o acesso...</div>';
 
-  const {error:inviteError}=await supabase.from("invites").upsert({
-    email,
-    display_name:displayName,
-    role,
-    active:true,
-    created_by:session.user.id
-  },{onConflict:"email"});
-
-  if(inviteError){
-    el("tempPass").innerHTML='<div class="notice error">'+esc("Não foi possível registrar o acesso: "+inviteError.message)+'</div>';
+  const {data:prep,error:prepError}=await supabase.rpc("admin_prepare_invite",{
+    p_email:email,
+    p_display_name:displayName,
+    p_role:role
+  });
+  if(prepError){
+    el("tempPass").innerHTML='<div class="notice error">'+esc("Não foi possível preparar o acesso: "+prepError.message)+'</div>';
     return;
   }
 
@@ -405,13 +402,12 @@ async function renderAdmin(){
       emailRedirectTo:location.origin+location.pathname
     }
   });
-
   if(authError){
-    el("tempPass").innerHTML='<div class="notice error">'+esc("O perfil foi preparado, mas o convite de acesso falhou: "+authError.message)+'</div>';
+    el("tempPass").innerHTML='<div class="notice error">'+esc("O acesso foi preparado, mas o envio do convite falhou: "+authError.message)+'</div>';
     return;
   }
 
-  el("tempPass").innerHTML='<div class="notice"><b>Convite enviado.</b><br>'+esc(displayName)+' receberá no e-mail um link seguro para entrar. O perfil e as permissões são vinculados automaticamente ao e-mail cadastrado.</div>';
+  el("tempPass").innerHTML='<div class="notice"><b>Convite enviado.</b><br>'+esc(displayName)+' receberá um link seguro no e-mail. Ao entrar, o perfil será associado automaticamente ao papel selecionado.</div>';
   setTimeout(()=>renderAdmin(),3500);
 };
  el("initStorage").onclick=async()=>{const {data,error}=await supabase.functions.invoke("ensure-storage");if(error||data?.error)flash(data?.error||error.message,"error");else flash("Anexos privados ativados.")};
