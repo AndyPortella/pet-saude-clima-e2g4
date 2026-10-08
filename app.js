@@ -5,7 +5,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
 
 const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / Cassino dos Oficiais",student:"Estudante",coordinator_view:"Coordenação — visualização"};
 const statusLabels={planejado:"Planejado",em_andamento:"Em andamento",pendente:"Pendente",concluido:"Concluído",suspenso:"Suspenso"};
-let session=null,profile=null,spaces=[],perms={},profiles={},previewRole=null;
+let session=null,profile=null,spaces=[],perms={},profiles={},previewRole=null,auditOverlay=true,planningCursor=new Date();
 
 const el=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -45,13 +45,13 @@ async function applyPreviewRole(role){
  perms={}; (p||[]).forEach(x=>perms[x.space_slug]=x);
  renderShell(); navigate("home");
 }
-function adminEditingEnabled(){return profile?.role==="gat4_admin"&&!previewRole}
+function adminEditingEnabled(){return profile?.role==="gat4_admin"&&(!previewRole||auditOverlay)}
 function renderShell(){
  const visibleSpaces=spaces.filter(s=>perms[s.slug]?.can_view===true);
  const shownRole=previewRole||profile.role;
  const previewControl=profile.role==="gat4_admin"?`<div class="previewControl"><label for="previewRole">Ver como</label><select id="previewRole"><option value="">Minha visão — Tutoria GAT 4</option><option value="eixo2_editor" ${previewRole==="eixo2_editor"?"selected":""}>Tutoria Eixo 2</option><option value="sus_editor" ${previewRole==="sus_editor"?"selected":""}>Preceptora / Orientadora</option><option value="student" ${previewRole==="student"?"selected":""}>Estudante</option><option value="coordinator_view" ${previewRole==="coordinator_view"?"selected":""}>Coordenação</option></select></div>`:"";
  document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox">${previewControl}<span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[shownRole])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
- ${previewRole?`<div class="previewBanner">👁 Você está visualizando o Diário como <b>${esc(roleLabels[previewRole])}</b>. Nada foi alterado no seu acesso real.<button class="btn secondary" id="exitPreview">Voltar à minha visão</button></div>`:""}
+ ${previewRole?`<div class="previewBanner">👁 Você está visualizando o Diário como <b>${esc(roleLabels[previewRole])}</b>. <span>${auditOverlay?"Ferramentas da tutoria estão visíveis para auditoria.":"Visão limpa, como esse perfil realmente vê."}</span><button class="btn secondary" id="toggleAudit">${auditOverlay?"Ocultar ferramentas da tutoria":"Mostrar ferramentas da tutoria"}</button><button class="btn secondary" id="exitPreview">Voltar à minha visão</button></div>`:""}
  <div class="layout"><aside class="sidebar" id="nav"><button class="navbtn" data-view="home">🏠 Painel</button>
  ${visibleSpaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
  ${adminEditingEnabled()?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
@@ -59,9 +59,10 @@ function renderShell(){
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
  el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload());
  if(el("previewRole")) el("previewRole").onchange=e=>applyPreviewRole(e.target.value);
- if(el("exitPreview")) el("exitPreview").onclick=()=>applyPreviewRole("");
+ if(el("toggleAudit")) el("toggleAudit").onclick=()=>{auditOverlay=!auditOverlay;renderShell();navigate("home")};
+ if(el("exitPreview")) el("exitPreview").onclick=()=>{auditOverlay=true;applyPreviewRole("")};
 }
-function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",estudio_tripulacao:"🎙️",minha_rota:"🧠",desafios_quiz:"🎯",radar_tripulacao:"📡",ideias_acao:"💡",vitrine_expedicao:"🏆",fontes_evidencias:"🗂️",relatorio_mensal:"📄"})[s]||"•"}
+function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",estudio_tripulacao:"🎙️",minha_rota:"🧠",desafios_quiz:"🎯",radar_tripulacao:"📡",ideias_acao:"💡",vitrine_expedicao:"🏆",fontes_evidencias:"🗂️",planejamento:"🗓️",relatorio_mensal:"📄"})[s]||"•"}
 async function navigate(view){
  document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
  if(view==="home") return renderHome();
@@ -69,7 +70,43 @@ async function navigate(view){
  if(view==="praca_tripulacao") return renderPlaza();
  if(view==="relatorio_mensal") return renderReports();
  if(view==="tripulacao") return renderCrew();
+ if(view==="planejamento") return renderPlanning();
  return renderEntries(view);
+}
+
+function editorStamp(row){
+ if(!row?.updated_by||!row?.updated_at)return "";
+ const who=profiles[row.updated_by]?.display_name||"Tutoria";
+ const when=new Date(row.updated_at).toLocaleString("pt-BR");
+ return `<span class="editStamp">✎ Editado por ${esc(who)} · ${esc(when)}</span>`;
+}
+function spaceEditButton(slug){
+ return adminEditingEnabled()?`<button class="btn secondary spaceEdit" data-space="${esc(slug)}">✏️ Editar área</button>`:"";
+}
+function bindSpaceEditButtons(){
+ document.querySelectorAll(".spaceEdit").forEach(b=>b.onclick=()=>openSpaceEditor(b.dataset.space));
+}
+function openSpaceEditor(slug){
+ const s=spaces.find(x=>x.slug===slug);if(!s)return;
+ const wrap=document.createElement("div");wrap.className="modalBackdrop";wrap.id="spaceModal";
+ wrap.innerHTML=`<div class="modalCard"><h3>Editar área</h3><form id="spaceForm"><label>Título</label><input name="title" required value="${esc(s.title)}"><label>Descrição</label><textarea name="description">${esc(s.description||"")}</textarea><div class="actions"><button class="btn">Salvar alterações</button><button type="button" class="btn secondary" id="closeSpaceModal">Cancelar</button></div></form></div>`;
+ document.body.append(wrap);
+ el("closeSpaceModal").onclick=()=>wrap.remove();
+ el("spaceForm").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const {error}=await supabase.from("spaces").update({title:fd.get("title"),description:fd.get("description")||null,updated_at:new Date().toISOString(),updated_by:session.user.id}).eq("slug",slug);if(error){flash(error.message,"error");return}wrap.remove();await loadBase();renderShell();navigate(slug);flash("Área atualizada.")};
+}
+async function showHistory(tableName,recordId,title="Histórico de alterações"){
+ const {data,error}=await supabase.from("audit_log").select("*").eq("table_name",tableName).eq("record_id",String(recordId)).order("changed_at",{ascending:false});
+ if(error){flash(error.message,"error");return}
+ const wrap=document.createElement("div");wrap.className="modalBackdrop";wrap.id="historyModal";
+ const rows=(data||[]).map(x=>{const who=profiles[x.changed_by]?.display_name||"Tutoria";return `<details class="historyItem"><summary>${esc(new Date(x.changed_at).toLocaleString("pt-BR"))} · ${esc(who)} · ${esc(x.action)}</summary><div class="historyGrid"><div><b>Versão anterior</b><pre>${esc(JSON.stringify(x.before_data||{},null,2))}</pre></div><div><b>Versão resultante</b><pre>${esc(JSON.stringify(x.after_data||{},null,2))}</pre></div></div></details>`}).join("")||'<p>Nenhuma alteração registrada ainda.</p>';
+ wrap.innerHTML=`<div class="modalCard wide"><div class="modalHead"><h3>${esc(title)}</h3><button class="btn secondary" id="closeHistory">Fechar</button></div>${rows}</div>`;
+ document.body.append(wrap);el("closeHistory").onclick=()=>wrap.remove();
+}
+function historyButton(tableName,id){
+ return adminEditingEnabled()?`<button class="btn secondary historyBtn" data-table="${esc(tableName)}" data-id="${esc(id)}">Histórico</button>`:"";
+}
+function bindHistoryButtons(){
+ document.querySelectorAll(".historyBtn").forEach(b=>b.onclick=()=>showHistory(b.dataset.table,b.dataset.id));
 }
 async function renderHome(){
  const [{count:marcos},{count:gat4},{count:registros},{count:gestao},{data:panel}]=await Promise.all([
@@ -93,7 +130,7 @@ async function renderHome(){
   coordination_text:"visualiza e exporta, sem editar.",
   next_milestones:"10/10/2026 — Entrega do relatório mensal referente a setembro.\n16/10/2026 — Reunião geral do PET-Saúde: Clima para apresentação das propostas em construção pelos GTs."
  };
- el("content").innerHTML=`<div class="hero"><div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div>${adminEditingEnabled()?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
+ el("content").innerHTML=`<div class="hero expeditionHero"><div><div class="eyebrow">Caderno de campo vivo</div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div><div class="heroCompass" aria-hidden="true">🧭</div>${adminEditingEnabled()?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
  <div class="grid"><div class="stat"><b>${marcos||0}</b>marcos da rota</div><div class="stat"><b>${gat4||0}</b>participantes GAT 4</div><div class="stat"><b>${registros||0}</b>registros de bordo</div><div class="stat"><b>${gestao||0}</b>itens de gestão</div></div>
  <div class="card"><h3>Situação atual</h3><p><b>Fase:</b> ${esc(p.phase)}. <b>GAT em foco:</b> ${esc(p.focus)}. <b>Integração:</b> ${esc(p.integration)}.</p></div><div class="card"><h3>Próximos marcos</h3><p>${esc(p.next_milestones||"").replace(/\n/g,"<br>")}</p></div>
  <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> ${esc(p.cabin_text)} <b>Eixo 2:</b> ${esc(p.eixo2_text)} <b>Cassino dos Oficiais:</b> ${esc(p.cassino_text)} <b>Praça da Tripulação:</b> ${esc(p.praca_text)} <b>Coordenação:</b> ${esc(p.coordination_text)}</p></div>
@@ -127,9 +164,10 @@ async function renderCrew(){
  const {data,error}=await supabase.from("crew_members").select("*").order("sort_order").order("display_name");
  if(error){flash(error.message,"error");return}
  const rows=data||[];
- el("content").innerHTML=`<div class="hero"><div><h2>👥 Tripulação</h2><p>Composição real do Eixo 2: GAT 3 + GAT 4, preceptoras, orientadora e estudantes.</p></div>${adminEditingEnabled()?'<button class="btn" id="addCrew">+ Incluir participante</button>':""}</div>
+ el("content").innerHTML=`<div class="hero"><div><h2>👥 ${esc(spaces.find(s=>s.slug==="tripulacao")?.title||"Tripulação")}</h2><p>${esc(spaces.find(s=>s.slug==="tripulacao")?.description||"Composição real do Eixo 2.")}</p></div><div class="actions">${spaceEditButton("tripulacao")}${adminEditingEnabled()?'<button class="btn" id="addCrew">+ Incluir participante</button>':""}</div></div>
  <div id="crewEditor"></div>
- <div class="card tablewrap"><table><thead><tr><th>Nome</th><th>Vínculo</th><th>Papel</th><th>Status</th>${adminEditingEnabled()?"<th>Ações</th>":""}</tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.display_name)}</b></td><td>${esc(x.gat)}</td><td>${esc(x.participant_role)}</td><td>${esc(x.status)}</td>${adminEditingEnabled()?`<td><button class="btn secondary crewEdit" data-id="${x.id}">Corrigir</button><button class="btn warn crewDel" data-id="${x.id}">Excluir</button></td>`:""}</tr>`).join("")}</tbody></table></div>`;
+ <div class="card tablewrap"><table><thead><tr><th>Nome</th><th>Vínculo</th><th>Papel</th><th>Status</th>${adminEditingEnabled()?"<th>Ações</th>":""}</tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.display_name)}</b></td><td>${esc(x.gat)}</td><td>${esc(x.participant_role)}</td><td>${esc(x.status)}</td>${adminEditingEnabled()?`<td>${editorStamp(x)}<div class="actions"><button class="btn secondary crewEdit" data-id="${x.id}">Corrigir</button>${historyButton("crew_members",x.id)}<button class="btn warn crewDel" data-id="${x.id}">Excluir</button></div></td>`:""}</tr>`).join("")}</tbody></table></div>`;
+ bindSpaceEditButtons();bindHistoryButtons();
  if(adminEditingEnabled()){
   el("addCrew").onclick=()=>crewForm(null);
   document.querySelectorAll(".crewEdit").forEach(b=>b.onclick=()=>crewForm(rows.find(x=>x.id===b.dataset.id)));
@@ -147,15 +185,16 @@ function crewForm(row){
  <div class="full"><label>Seção</label><input name="section" value="${esc(row?.section||"")}"></div>
  </div><div class="actions"><button class="btn">Salvar alterações</button><button type="button" class="btn secondary" id="cancelCrew">Cancelar</button></div></form></div>`;
  el("cancelCrew").onclick=()=>el("crewEditor").innerHTML="";
- el("crewForm").onsubmit=async ev=>{ev.preventDefault();const fd=new FormData(ev.target);const payload={display_name:fd.get("display_name"),eixo:fd.get("eixo"),gat:fd.get("gat"),participant_role:fd.get("participant_role"),status:fd.get("status"),sort_order:Number(fd.get("sort_order")||100),section:fd.get("section")||null,updated_at:new Date().toISOString()};const q=row?supabase.from("crew_members").update(payload).eq("id",row.id):supabase.from("crew_members").insert(payload);const {error}=await q;if(error)flash(error.message,"error");else{flash("Tripulação atualizada.");renderCrew()}};
+ el("crewForm").onsubmit=async ev=>{ev.preventDefault();const fd=new FormData(ev.target);const payload={display_name:fd.get("display_name"),eixo:fd.get("eixo"),gat:fd.get("gat"),participant_role:fd.get("participant_role"),status:fd.get("status"),sort_order:Number(fd.get("sort_order")||100),section:fd.get("section")||null,updated_at:new Date().toISOString(),updated_by:session.user.id};const q=row?supabase.from("crew_members").update(payload).eq("id",row.id):supabase.from("crew_members").insert(payload);const {error}=await q;if(error)flash(error.message,"error");else{flash("Tripulação atualizada.");renderCrew()}};
  setTimeout(()=>el("crewEditor")?.scrollIntoView({behavior:"smooth",block:"start"}),0);
 }
 async function renderEntries(slug){
  const space=spaces.find(s=>s.slug===slug); const pm=perms[slug]||{};
  let q=supabase.from("entries").select("*").eq("space_slug",slug).order("display_order",{ascending:true,nullsFirst:false}).order("event_date",{ascending:false,nullsFirst:false}); const {data}=await q;
- el("content").innerHTML=`<div class="hero"><div><h2>${iconFor(slug)} ${esc(space?.title||slug)}</h2><p>${esc(space?.description||"")}</p></div><div class="actions">${adminEditingEnabled()?'<button class="btn secondary" id="resetOrder">↕ Ordem cronológica</button>':""}${pm.can_create?'<button class="btn" id="addEntry">+ Incluir</button>':""}</div></div><div id="entryForm"></div><div id="entryList"></div>`;
+ el("content").innerHTML=`<div class="hero"><div><h2>${iconFor(slug)} ${esc(space?.title||slug)}</h2><p>${esc(space?.description||"")}</p></div><div class="actions">${spaceEditButton(slug)}${adminEditingEnabled()?'<button class="btn secondary" id="resetOrder">↕ Ordem cronológica</button>':""}${(pm.can_create||adminEditingEnabled())?'<button class="btn" id="addEntry">+ Incluir</button>':""}</div></div><div id="entryForm"></div><div id="entryList"></div>`;
  if(adminEditingEnabled()&&el("resetOrder")) el("resetOrder").onclick=async()=>{const {error}=await supabase.rpc("reset_space_chronology",{p_space_slug:slug});if(error)flash(error.message,"error");else{flash("Ordem cronológica restaurada.");renderEntries(slug)}};
- if(pm.can_create) el("addEntry").onclick=()=>{entryForm(slug,null);el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"})};
+ bindSpaceEditButtons();
+ if((pm.can_create||adminEditingEnabled())&&el("addEntry")) el("addEntry").onclick=()=>{entryForm(slug,null);el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"})};
  renderEntryList(slug,data||[],pm);
 }
 function renderMetaDetails(m){
@@ -165,12 +204,14 @@ function renderMetaDetails(m){
  return parts.length?`<div class="entryDetails">${parts.join("")}</div>`:"";
 }
 function renderEntryList(slug,rows,pm){
- el("entryList").innerHTML=rows.length?rows.map(r=>`<article class="entry"><div class="meta"><span class="badge">${esc(r.entry_type)}</span>${r.status?'<span class="badge">'+esc(statusLabels[r.status])+'</span>':""}${r.event_date?'<span>📅 '+fmt(r.event_date)+'</span>':""}</div><h3>${esc(r.title)}</h3><p>${esc(r.body||"").replace(/\n/g,"<br>")}</p>${renderMetaDetails(r.metadata)}${r.due_date?'<p class="due"><b>Prazo:</b> '+fmt(r.due_date)+'</p>':""}${safeLink(r.link_url)?'<p><a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(r.link_url))+'">🔗 Abrir link</a></p>':""}<div id="files-${r.id}"></div><div class="actions">${adminEditingEnabled()?'<button class="btn secondary move up" title="Subir" data-id="'+r.id+'">↑</button><button class="btn secondary move down" title="Descer" data-id="'+r.id+'">↓</button>':""}${pm.can_update?'<button class="btn secondary edit" data-id="'+r.id+'">Corrigir</button>':""}${pm.can_delete?'<button class="btn warn del" data-id="'+r.id+'">Excluir</button>':""}${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="upload" data-parent="'+r.id+'" data-space="'+slug+'"></label>':""}</div></article>`).join(""):'<div class="card">Nenhum registro ainda.</div>';
+ const canEdit=pm.can_update||adminEditingEnabled(),canDelete=pm.can_delete||adminEditingEnabled(),canCreate=pm.can_create||adminEditingEnabled();
+ el("entryList").innerHTML=rows.length?rows.map(r=>`<article class="entry"><div class="meta"><span class="badge">${esc(r.entry_type)}</span>${r.status?'<span class="badge">'+esc(statusLabels[r.status])+'</span>':""}${r.event_date?'<span>📅 '+fmt(r.event_date)+'</span>':""}${editorStamp(r)}</div><h3>${esc(r.title)}</h3><p>${esc(r.body||"").replace(/\n/g,"<br>")}</p>${renderMetaDetails(r.metadata)}${r.due_date?'<p class="due"><b>Prazo:</b> '+fmt(r.due_date)+'</p>':""}${safeLink(r.link_url)?'<p><a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(r.link_url))+'">🔗 Abrir link</a></p>':""}<div id="files-${r.id}"></div><div class="actions">${adminEditingEnabled()?'<button class="btn secondary move up" title="Subir" data-id="'+r.id+'">↑</button><button class="btn secondary move down" title="Descer" data-id="'+r.id+'">↓</button>':""}${canEdit?'<button class="btn secondary edit" data-id="'+r.id+'">Corrigir</button>':""}${historyButton("entries",r.id)}${canDelete?'<button class="btn warn del" data-id="'+r.id+'">Excluir</button>':""}${canCreate?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="upload" data-parent="'+r.id+'" data-space="'+slug+'"></label>':""}</div></article>`).join(""):'<div class="card">Nenhum registro ainda.</div>';
  document.querySelectorAll(".move.up").forEach(b=>b.onclick=async()=>{const {error}=await supabase.rpc("move_entry",{p_entry_id:b.dataset.id,p_direction:-1});if(error)flash(error.message,"error");else renderEntries(slug)});
  document.querySelectorAll(".move.down").forEach(b=>b.onclick=async()=>{const {error}=await supabase.rpc("move_entry",{p_entry_id:b.dataset.id,p_direction:1});if(error)flash(error.message,"error");else renderEntries(slug)});
  document.querySelectorAll(".edit").forEach(b=>b.onclick=async()=>{const {data,error}=await supabase.from("entries").select("*").eq("id",b.dataset.id).single();if(error){flash(error.message,"error");return}entryForm(slug,data);setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth",block:"start"}),0)});
  document.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{if(confirm("Excluir somente este registro?")){const {error}=await supabase.from("entries").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderEntries(slug)}});
  document.querySelectorAll(".upload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"entry",i.dataset.parent,i.dataset.space).then(()=>renderEntries(slug)));
+ bindHistoryButtons();
  rows.forEach(r=>loadAttachments("entry",r.id,"files-"+r.id));
 }
 function entryMetaFields(slug,row){
@@ -187,7 +228,8 @@ function entryMetaFields(slug,row){
   desafios_quiz:[["audience","Público"],["delivery","Entrega"]],
   radar_tripulacao:[["type","Tipo"],["source","Fonte"]],
   ideias_acao:[["responsible","Responsável"],["state","Situação"]],
-  vitrine_expedicao:[["type","Tipo de produto"],["evidence","Evidência"]]
+  vitrine_expedicao:[["type","Tipo de produto"],["evidence","Evidência"]],
+  planejamento:[["responsible","Responsável"],["state","Situação"],["audience","Público"],["note","Lembrete / post-it"]]
  };
  const keys=defs[slug]||[];
  const m=row?.metadata||{};
@@ -219,37 +261,74 @@ function entryForm(slug,row){
   const {error}=await q;if(error)flash(error.message,"error");else{flash("Alterações salvas.");renderEntries(slug)}
  };
 }
+
+async function renderPlanning(){
+ const slug="planejamento",space=spaces.find(s=>s.slug===slug),pm=perms[slug]||{};
+ const visible=spaces.filter(s=>perms[s.slug]?.can_view).map(s=>s.slug);
+ const y=planningCursor.getFullYear(),m=planningCursor.getMonth();
+ const first=new Date(y,m,1),last=new Date(y,m+1,0);
+ const start=`${y}-${String(m+1).padStart(2,"0")}-01`,end=`${y}-${String(m+1).padStart(2,"0")}-${String(last.getDate()).padStart(2,"0")}`;
+ const {data:all}=await supabase.from("entries").select("*").in("space_slug",visible).gte("event_date",start).lte("event_date",end).order("event_date",{ascending:true});
+ const {data:notes}=await supabase.from("entries").select("*").eq("space_slug",slug).order("event_date",{ascending:false,nullsFirst:false});
+ const offset=(first.getDay()+6)%7,days=last.getDate(),cells=[];
+ for(let i=0;i<offset;i++)cells.push('<div class="calendarDay empty"></div>');
+ for(let d=1;d<=days;d++){
+   const date=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+   const items=(all||[]).filter(x=>x.event_date===date);
+   cells.push(`<button class="calendarDay" data-date="${date}"><b>${d}</b>${items.slice(0,3).map(x=>'<span class="calendarItem">'+iconFor(x.space_slug)+' '+esc(x.title)+'</span>').join("")}${items.length>3?'<small>+'+(items.length-3)+' itens</small>':""}</button>`);
+ }
+ const today=new Date(),weekEnd=new Date(today);weekEnd.setDate(today.getDate()+7);
+ const upcoming=(notes||[]).filter(x=>x.event_date&&new Date(x.event_date+"T12:00:00")>=new Date(today.getFullYear(),today.getMonth(),today.getDate())&&new Date(x.event_date+"T12:00:00")<=weekEnd).slice(0,5);
+ el("content").innerHTML=`<div class="hero planningHero"><div><h2>🗓️ ${esc(space?.title||"Planejamento & Calendário")}</h2><p>${esc(space?.description||"Agenda visual da Expedição.")}</p></div><div class="actions">${spaceEditButton(slug)}${(pm.can_create||adminEditingEnabled())?'<button class="btn" id="newPostit">+ Novo post-it</button>':""}</div></div>
+ ${upcoming.length?'<div class="postitReminder"><b>📌 Não esqueça de olhar as atividades desta semana</b>'+upcoming.map(x=>'<span>'+fmt(x.event_date)+' — '+esc(x.title)+'</span>').join("")+'</div>':""}
+ <div class="calendarToolbar"><button class="btn secondary" id="prevMonth">←</button><h3>${first.toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</h3><button class="btn secondary" id="nextMonth">→</button></div>
+ <div class="calendarWeek"><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span></div>
+ <div class="calendarGrid">${cells.join("")}</div>
+ <div id="entryForm"></div><h3 class="sectionTitle">Post-its e compromissos</h3><div id="entryList"></div>`;
+ bindSpaceEditButtons();
+ el("prevMonth").onclick=()=>{planningCursor=new Date(y,m-1,1);renderPlanning()};
+ el("nextMonth").onclick=()=>{planningCursor=new Date(y,m+1,1);renderPlanning()};
+ if(el("newPostit"))el("newPostit").onclick=()=>entryForm(slug,null);
+ document.querySelectorAll(".calendarDay[data-date]").forEach(b=>b.onclick=()=>{if(pm.can_create||adminEditingEnabled()){entryForm(slug,{event_date:b.dataset.date,entry_type:"post-it",title:"",body:"",metadata:{state:"planejado"}});setTimeout(()=>el("entryForm")?.scrollIntoView({behavior:"smooth"}),0)}});
+ renderEntryList(slug,notes||[],pm);
+}
+function renderCommentThread(comments,reactions,parent=null,depth=0){
+ const list=(comments||[]).filter(x=>(x.parent_comment_id||null)===parent);
+ return list.map(x=>{const mine=(reactions||[]).find(r=>r.comment_id===x.id&&r.user_id===session.user.id)?.reaction||"";const counts={};(reactions||[]).filter(r=>r.comment_id===x.id).forEach(r=>counts[r.reaction]=(counts[r.reaction]||0)+1);const canEdit=x.created_by===session.user.id||adminEditingEnabled();return `<div class="commentThread" style="margin-left:${Math.min(depth,3)*18}px"><div class="comment"><div><b>${esc(profiles[x.created_by]?.display_name||"Tripulante")}</b> ${editorStamp(x)}<div>${esc(x.body)}</div><div class="commentMiniActions"><button class="miniBtn replyBtn" data-id="${x.id}">Responder</button>${["❤️","👍","🤔"].map(r=>'<button class="miniBtn commentReact '+(mine===r?'selected':'')+'" data-id="'+x.id+'" data-reaction="'+r+'">'+r+' '+(counts[r]||"")+'</button>').join("")}${canEdit?'<button class="miniBtn cedit" data-id="'+x.id+'">Editar</button><button class="miniBtn cdel" data-id="'+x.id+'">Excluir</button>':""}${adminEditingEnabled()?historyButton("plaza_comments",x.id):""}</div></div></div>${renderCommentThread(comments,reactions,x.id,depth+1)}</div>`}).join("");
+}
 async function renderPlaza(){
  const pm=perms.praca_tripulacao||{};
  const {data:posts}=await supabase.from("plaza_posts").select("*").order("created_at",{ascending:false});
  const ids=(posts||[]).map(p=>p.id);
- const [{data:comments},{data:reactions}]=ids.length?await Promise.all([
-   supabase.from("plaza_comments").select("*").in("post_id",ids).order("created_at",{ascending:true}),
-   supabase.from("plaza_reactions").select("*").in("post_id",ids)
- ]):[{data:[]},{data:[]}];
- el("content").innerHTML=`<div class="hero"><div><h2>☀️ Praça da Tripulação</h2><p>Espaço comum de pertencimento, convivência e circulação: ideias, achados, ODS, reconhecimento, dúvidas e cuidado em rede.</p></div></div>
+ const [{data:comments},{data:reactions}]=ids.length?await Promise.all([supabase.from("plaza_comments").select("*").in("post_id",ids).order("created_at",{ascending:true}),supabase.from("plaza_reactions").select("*").in("post_id",ids)]):[{data:[]},{data:[]}];
+ const commentIds=(comments||[]).map(x=>x.id);const {data:commentReactions}=commentIds.length?await supabase.from("plaza_comment_reactions").select("*").in("comment_id",commentIds):{data:[]};
+ el("content").innerHTML=`<div class="hero"><div><h2>☀️ ${esc(spaces.find(s=>s.slug==="praca_tripulacao")?.title||"Praça da Tripulação")}</h2><p>${esc(spaces.find(s=>s.slug==="praca_tripulacao")?.description||"Espaço comum de pertencimento, convivência e circulação.")}</p></div><div class="actions">${spaceEditButton("praca_tripulacao")}</div></div>
  <div class="card plazaFlow"><b>Da Praça ao Diário:</b> observar → compartilhar → discutir → validar → virar rota, evidência ou ação.</div>
  ${pm.can_create?'<div class="card plazaComposer"><h3>Compartilhar com a tripulação</h3><form id="pf"><div class="formgrid"><div><label>Categoria</label><select name="category"><option>Bom dia</option><option>Ideia</option><option>Achado do território</option><option>ODS em ação</option><option>Sugestão de rota</option><option>Dúvida</option><option>Reconhecimento</option><option>Olha o que encontrei</option><option>Precisamos olhar isso</option><option>Cuidado em rede</option><option>Foto da Expedição</option><option>Vale ver</option></select></div><div><label>Link</label><input name="link_url" type="url" placeholder="https://..."></div><div class="full"><label>Mensagem</label><textarea name="body" required></textarea></div></div><button class="btn sun">Publicar na Praça</button></form></div>':""}<div id="posts"></div>`;
- if(pm.can_create) el("pf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.from("plaza_posts").insert({category:f.get("category"),body:f.get("body"),link_url:f.get("link_url")||null,created_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()};
+ bindSpaceEditButtons();
+ if(pm.can_create||adminEditingEnabled()) el("pf").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await supabase.from("plaza_posts").insert({category:f.get("category"),body:f.get("body"),link_url:f.get("link_url")||null,created_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()};
  el("posts").innerHTML=(posts||[]).map(p=>{
    const own=p.created_by===session.user.id||profile.role==="gat4_admin";
    const cs=(comments||[]).filter(x=>x.post_id===p.id), rs=(reactions||[]).filter(x=>x.post_id===p.id);
    const counts={};rs.forEach(x=>counts[x.reaction]=(counts[x.reaction]||0)+1);
    const mine=rs.find(x=>x.user_id===session.user.id)?.reaction||"";
-   const react=["❤️ Gostei","👏 Arrasou","💡 Me fez pensar","🌱 ODS","🧭 Vamos por aí"];
-   return `<article class="entry post"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span></div><p class="author">${esc(profiles[p.created_by]?.display_name||"Tripulante")}</p><p>${esc(p.body).replace(/\n/g,"<br>")}</p>${safeLink(p.link_url)?'<a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(p.link_url))+'">🔗 Abrir conteúdo</a>':""}<div id="pfiles-${p.id}"></div>
+   const react=["👍 Gostei","❤️ Amei","💡 Me fez pensar","😕 Não achei legal","🛠️ Pode melhorar","🧭 Vamos por aí"];
+   return `<article class="entry post"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span>${editorStamp(p)}</div><p class="author">${esc(profiles[p.created_by]?.display_name||"Tripulante")}</p><p>${esc(p.body).replace(/\n/g,"<br>")}</p>${safeLink(p.link_url)?'<a class="link" target="_blank" rel="noopener" href="'+esc(safeLink(p.link_url))+'">🔗 Abrir conteúdo</a>':""}<div id="pfiles-${p.id}"></div>
    <div class="reactionBar">${react.map(x=>'<button class="reaction '+(mine===x?'selected':'')+'" data-post="'+p.id+'" data-reaction="'+esc(x)+'">'+esc(x)+' '+(counts[x]||'')+'</button>').join("")}</div>
-   <div class="commentList">${cs.map(x=>{const canEditComment=x.created_by===session.user.id||adminEditingEnabled();return '<div class="comment"><b>'+esc(profiles[x.created_by]?.display_name||"Tripulante")+'</b><span>'+esc(x.body)+'</span>'+(canEditComment?'<span class="commentActions"><button class="btn secondary cedit" data-id="'+x.id+'">Corrigir</button><button class="btn warn cdel" data-id="'+x.id+'">Excluir</button></span>':"")+'</div>'}).join("")}</div>
+   <div class="commentList">${renderCommentThread(cs,commentReactions||[])}</div>
    ${pm.can_create?'<form class="commentForm" data-post="'+p.id+'"><input name="body" placeholder="Escreva um comentário..." required><button class="btn secondary">Comentar</button></form>':""}
-   <div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn secondary pedit" data-id="'+p.id+'">Corrigir</button><button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`;
+   <div class="actions">${pm.can_create?'<label class="btn secondary">📎 Anexar<input hidden type="file" class="pupload" data-id="'+p.id+'"></label>':""}${own?'<button class="btn secondary pedit" data-id="'+p.id+'">Corrigir</button>'+historyButton("plaza_posts",p.id)+'<button class="btn warn pdel" data-id="'+p.id+'">Excluir</button>':""}</div></article>`;
  }).join("")||'<div class="card">A Praça está esperando a primeira mensagem.</div>';
- document.querySelectorAll(".reaction").forEach(b=>b.onclick=async()=>{const {error}=await supabase.from("plaza_reactions").upsert({post_id:b.dataset.post,user_id:session.user.id,reaction:b.dataset.reaction},{onConflict:"post_id,user_id"});if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".reaction").forEach(b=>b.onclick=async()=>{const selected=b.classList.contains("selected");const q=selected?supabase.from("plaza_reactions").delete().eq("post_id",b.dataset.post).eq("user_id",session.user.id):supabase.from("plaza_reactions").upsert({post_id:b.dataset.post,user_id:session.user.id,reaction:b.dataset.reaction},{onConflict:"post_id,user_id"});const {error}=await q;if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".commentForm").forEach(f=>f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const body=String(fd.get("body")||"").trim();if(!body)return;const {error}=await supabase.from("plaza_comments").insert({post_id:f.dataset.post,body,created_by:session.user.id,updated_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".pedit").forEach(b=>b.onclick=async()=>{const p=(posts||[]).find(x=>x.id===b.dataset.id);if(!p)return;const body=prompt("Corrigir publicação:",p.body);if(body===null)return;const category=prompt("Categoria:",p.category);if(category===null)return;const link=prompt("Link (opcional):",p.link_url||"");if(link===null)return;const {error}=await supabase.from("plaza_posts").update({body,category,link_url:link||null,updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",p.id);if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".replyBtn").forEach(b=>b.onclick=async()=>{const body=prompt("Responder ao comentário:");if(!body?.trim())return;const x=(comments||[]).find(y=>y.id===b.dataset.id);const {error}=await supabase.from("plaza_comments").insert({post_id:x.post_id,parent_comment_id:x.id,body:body.trim(),created_by:session.user.id,updated_by:session.user.id});if(error)flash(error.message,"error");else renderPlaza()});
+ document.querySelectorAll(".commentReact").forEach(b=>b.onclick=async()=>{const selected=b.classList.contains("selected");const q=selected?supabase.from("plaza_comment_reactions").delete().eq("comment_id",b.dataset.id).eq("user_id",session.user.id):supabase.from("plaza_comment_reactions").upsert({comment_id:b.dataset.id,user_id:session.user.id,reaction:b.dataset.reaction},{onConflict:"comment_id,user_id"});const {error}=await q;if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".cedit").forEach(b=>b.onclick=async()=>{const x=(comments||[]).find(y=>y.id===b.dataset.id);if(!x)return;const body=prompt("Corrigir comentário:",x.body);if(body===null)return;const {error}=await supabase.from("plaza_comments").update({body,updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",x.id);if(error)flash(error.message,"error");else renderPlaza()});
  document.querySelectorAll(".cdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir este comentário?")){const {error}=await supabase.from("plaza_comments").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
  document.querySelectorAll(".pdel").forEach(b=>b.onclick=async()=>{if(confirm("Excluir esta publicação?")){const {error}=await supabase.from("plaza_posts").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else renderPlaza()}});
  document.querySelectorAll(".pupload").forEach(i=>i.onchange=()=>uploadFile(i.files[0],"plaza_post",i.dataset.id,"praca_tripulacao").then(renderPlaza));
+ bindHistoryButtons();
  (posts||[]).forEach(p=>loadAttachments("plaza_post",p.id,"pfiles-"+p.id));
 }
 const reportFields=[["activities","1. Principais atividades realizadas no mês"],["settings_services","2. Cenários, serviços ou espaços envolvidos"],["audiences_quantities","3. Público envolvido e quantitativos"],["goal_objective","4. Meta ou objetivo trabalhado no mês"],["results","5. Principais resultados alcançados"],["indicators","6. Indicadores e números do período"],["articulations","7. Articulações realizadas"],["service_supervisor_participation","8. Participação do orientador de serviço"],["barriers","9. Principais barreiras ou dificuldades"],["strategies","10. Estratégias adotadas para superar as barreiras"],["products","11. Produtos elaborados no mês"],["evidences","12. Evidências e documentos comprobatórios"],["next_steps","13. Próximos passos"]];
@@ -257,10 +336,12 @@ function reportCompletion(r){const done=reportFields.filter(([k])=>String(r?.[k]
 async function renderReports(){
  const pm=perms.relatorio_mensal||{}; const {data}=await supabase.from("monthly_reports").select("*").order("competence",{ascending:false});
  const structure=`<div class="card reportStructure"><div class="reportStructureHead"><div><h3>Os 13 campos do relatório mensal</h3><p>Esta estrutura permanece visível para que o relatório seja construído ao longo da Expedição, e não lembrado apenas no fechamento do mês.</p></div><span class="badge">13 campos oficiais</span></div><div class="reportChecklist">${reportFields.map(([k,l])=>'<div class="reportCheck"><span class="reportNumber">'+l.split(".")[0]+'</span><span>'+esc(l.replace(/^\\d+\\.\\s*/,''))+'</span></div>').join("")}</div></div>`;
- el("content").innerHTML=`<div class="hero"><div><h2>📄 Relatório Mensal / Registro Oficial</h2><p>Dados construídos ao longo da Expedição. Visualize os 13 campos, acompanhe o preenchimento e exporte o registro oficial.</p></div>${pm.can_create?'<button class="btn" id="newReport">+ Nova competência</button>':""}</div>${structure}<div id="reportForm"></div><div id="reports"></div>`;
- if(pm.can_create) el("newReport").onclick=()=>reportForm(null);
- el("reports").innerHTML=(data||[]).map(r=>{const cp=reportCompletion(r);return `<div class="card"><div class="meta"><span class="badge">${fmt(r.competence)}</span><span>${esc(r.gt)}</span></div><div class="reportCardHead"><div><h3>Competência ${fmt(r.competence)}</h3><p>${cp.done} de ${cp.total} campos preenchidos</p></div><strong class="reportPct">${cp.pct}%</strong></div><div class="progress"><span style="width:${cp.pct}%"></span></div><div class="actions">${pm.can_update?'<button class="btn secondary redit" data-id="'+r.id+'">Abrir / corrigir os 13 campos</button>':""}<button class="btn secondary rexport" data-id="${r.id}">Exportar .doc</button></div></div>`}).join("")||'<div class="card"><h3>Nenhuma competência criada ainda.</h3><p>Os 13 campos acima já mostram a estrutura que será preenchida. Quando iniciar o mês, use “+ Nova competência”.</p></div>';
+ el("content").innerHTML=`<div class="hero"><div><h2>📄 ${esc(spaces.find(s=>s.slug==="relatorio_mensal")?.title||"Relatório Mensal / Registro Oficial")}</h2><p>${esc(spaces.find(s=>s.slug==="relatorio_mensal")?.description||"Dados construídos ao longo da Expedição.")}</p></div><div class="actions">${spaceEditButton("relatorio_mensal")}${(pm.can_create||adminEditingEnabled())?'<button class="btn" id="newReport">+ Nova competência</button>':""}</div></div>${structure}<div id="reportForm"></div><div id="reports"></div>`;
+ bindSpaceEditButtons();
+ if((pm.can_create||adminEditingEnabled())&&el("newReport")) el("newReport").onclick=()=>reportForm(null);
+ el("reports").innerHTML=(data||[]).map(r=>{const cp=reportCompletion(r);return `<div class="card"><div class="meta"><span class="badge">${fmt(r.competence)}</span><span>${esc(r.gt)}</span></div><div class="reportCardHead"><div><h3>Competência ${fmt(r.competence)}</h3><p>${cp.done} de ${cp.total} campos preenchidos</p></div><strong class="reportPct">${cp.pct}%</strong></div><div class="progress"><span style="width:${cp.pct}%"></span></div><div class="meta">${editorStamp(r)}</div><div class="actions">${(pm.can_update||adminEditingEnabled())?'<button class="btn secondary redit" data-id="'+r.id+'">Abrir / corrigir os 13 campos</button>':""}${historyButton("monthly_reports",r.id)}<button class="btn secondary rexport" data-id="${r.id}">Exportar .doc</button></div></div>`}).join("")||'<div class="card"><h3>Nenhuma competência criada ainda.</h3><p>Os 13 campos acima já mostram a estrutura que será preenchida. Quando iniciar o mês, use “+ Nova competência”.</p></div>';
  document.querySelectorAll(".redit").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("monthly_reports").select("*").eq("id",b.dataset.id).single();reportForm(data)});
+ bindHistoryButtons();
  document.querySelectorAll(".rexport").forEach(b=>b.onclick=async()=>{const {data}=await supabase.from("monthly_reports").select("*").eq("id",b.dataset.id).single();exportReport(data)});
 }
 function reportForm(r){
@@ -300,8 +381,8 @@ async function loadAttachments(kind,id,target){
   parts.push(`<div class="fileRow">${signed?.signedUrl?'<a class="file link" target="_blank" rel="noopener" href="'+esc(signed.signedUrl)+'">📎 '+esc(a.file_name)+'</a>':'📎 '+esc(a.file_name)}<span class="fileActions">${canEdit?'<button class="btn secondary fileRename" data-id="'+a.id+'" data-name="'+esc(a.file_name)+'">Renomear</button>':""}${canDelete?'<button class="btn warn fileDelete" data-id="'+a.id+'" data-path="'+esc(a.storage_path)+'">Excluir</button>':""}</span></div>`);
  }
  node.innerHTML=parts.join("");
- node.querySelectorAll(".fileRename").forEach(b=>b.onclick=async()=>{const name=prompt("Novo nome do arquivo:",b.dataset.name);if(name===null||!name.trim())return;const {error}=await supabase.from("attachments").update({file_name:name.trim()}).eq("id",b.dataset.id);if(error)flash(error.message,"error");else{flash("Nome do arquivo atualizado.");loadAttachments(kind,id,target)}});
+ node.querySelectorAll(".fileRename").forEach(b=>b.onclick=async()=>{const name=prompt("Novo nome do arquivo:",b.dataset.name);if(name===null||!name.trim())return;const {error}=await supabase.from("attachments").update({file_name:name.trim(),updated_by:session.user.id,updated_at:new Date().toISOString()}).eq("id",b.dataset.id);if(error)flash(error.message,"error");else{flash("Nome do arquivo atualizado.");loadAttachments(kind,id,target)}});
  node.querySelectorAll(".fileDelete").forEach(b=>b.onclick=async()=>{if(!confirm("Excluir este anexo?"))return;const {error:se}=await supabase.storage.from("e2g4-files").remove([b.dataset.path]);if(se){flash(se.message,"error");return}const {error}=await supabase.from("attachments").delete().eq("id",b.dataset.id);if(error)flash(error.message,"error");else{flash("Anexo excluído.");loadAttachments(kind,id,target)}});
 }
-function subscribeRealtime(){["entries","monthly_reports","plaza_posts","plaza_comments","plaza_reactions","attachments","crew_members"].forEach(t=>supabase.channel("rt-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{const active=document.querySelector(".navbtn.active")?.dataset.view;if(active)navigate(active)}).subscribe())}
+function subscribeRealtime(){["entries","monthly_reports","plaza_posts","plaza_comments","plaza_reactions","plaza_comment_reactions","attachments","crew_members","spaces"].forEach(t=>supabase.channel("rt-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{const active=document.querySelector(".navbtn.active")?.dataset.view;if(active)navigate(active)}).subscribe())}
 start();
