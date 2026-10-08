@@ -5,7 +5,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
 
 const roleLabels={gat4_admin:"Tutoria GAT 4",eixo2_editor:"Tutoria Eixo 2",sus_editor:"Preceptoria / Cassino dos Oficiais",student:"Estudante",coordinator_view:"Coordenação — visualização"};
 const statusLabels={planejado:"Planejado",em_andamento:"Em andamento",pendente:"Pendente",concluido:"Concluído",suspenso:"Suspenso"};
-let session=null,profile=null,spaces=[],perms={},profiles={};
+let session=null,profile=null,spaces=[],perms={},profiles={},previewRole=null;
 
 const el=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -36,17 +36,30 @@ async function loadBase(){
   supabase.from("role_permissions").select("*").eq("role",profile.role),
   supabase.from("profiles").select("user_id,display_name,role")
  ]);
- spaces=s||[]; (p||[]).forEach(x=>perms[x.space_slug]=x); (pr||[]).forEach(x=>profiles[x.user_id]=x);
+ spaces=s||[]; perms={}; (p||[]).forEach(x=>perms[x.space_slug]=x); (pr||[]).forEach(x=>profiles[x.user_id]=x);
 }
+async function applyPreviewRole(role){
+ previewRole=role||null;
+ const targetRole=previewRole||profile.role;
+ const {data:p}=await supabase.from("role_permissions").select("*").eq("role",targetRole);
+ perms={}; (p||[]).forEach(x=>perms[x.space_slug]=x);
+ renderShell(); navigate("home");
+}
+function adminEditingEnabled(){return profile?.role==="gat4_admin"&&!previewRole}
 function renderShell(){
  const visibleSpaces=spaces.filter(s=>perms[s.slug]?.can_view===true);
- document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox"><span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[profile.role])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
+ const shownRole=previewRole||profile.role;
+ const previewControl=profile.role==="gat4_admin"?`<div class="previewControl"><label for="previewRole">Ver como</label><select id="previewRole"><option value="">Minha visão — Tutoria GAT 4</option><option value="eixo2_editor" ${previewRole==="eixo2_editor"?"selected":""}>Tutoria Eixo 2</option><option value="sus_editor" ${previewRole==="sus_editor"?"selected":""}>Preceptora / Orientadora</option><option value="student" ${previewRole==="student"?"selected":""}>Estudante</option><option value="coordinator_view" ${previewRole==="coordinator_view"?"selected":""}>Coordenação</option></select></div>`:"";
+ document.getElementById("app").innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brandmark">⛵</div><div><h1>Expedição Mauá — Diário de Bordo</h1><small>Eixo 2 · GAT 4 + GAT 3</small></div></div><div class="userbox">${previewControl}<span class="chip">${esc(profile.display_name)} · ${esc(roleLabels[shownRole])}</span><button class="btn secondary" id="logout">Sair</button></div></header>
+ ${previewRole?`<div class="previewBanner">👁 Você está visualizando o Diário como <b>${esc(roleLabels[previewRole])}</b>. Nada foi alterado no seu acesso real.<button class="btn secondary" id="exitPreview">Voltar à minha visão</button></div>`:""}
  <div class="layout"><aside class="sidebar" id="nav"><button class="navbtn" data-view="home">🏠 Painel</button>
  ${visibleSpaces.map(s=>`<button class="navbtn" data-view="${s.slug}">${iconFor(s.slug)} ${esc(s.title)}</button>`).join("")}
- ${profile.role==="gat4_admin"?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
+ ${adminEditingEnabled()?'<button class="navbtn" data-view="admin">⚙️ Usuários e permissões</button>':""}</aside>
  <main class="main"><div id="flash"></div><div id="content"></div></main></div></div>`;
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
  el("logout").onclick=()=>supabase.auth.signOut().then(()=>location.reload());
+ if(el("previewRole")) el("previewRole").onchange=e=>applyPreviewRole(e.target.value);
+ if(el("exitPreview")) el("exitPreview").onclick=()=>applyPreviewRole("");
 }
 function iconFor(s){return ({cabine_gat4:"🧭",eixo2:"🤝",territorio_sus:"⚓",tripulacao:"👥",rota_registros:"🗺️",registros_bordo:"📓",atividades:"📚",praca_tripulacao:"☀️",estudio_tripulacao:"🎙️",minha_rota:"🧠",desafios_quiz:"🎯",radar_tripulacao:"📡",ideias_acao:"💡",vitrine_expedicao:"🏆",fontes_evidencias:"🗂️",relatorio_mensal:"📄"})[s]||"•"}
 async function navigate(view){
@@ -80,12 +93,12 @@ async function renderHome(){
   coordination_text:"visualiza e exporta, sem editar.",
   next_milestones:"10/10/2026 — Entrega do relatório mensal referente a setembro.\n16/10/2026 — Reunião geral do PET-Saúde: Clima para apresentação das propostas em construção pelos GTs."
  };
- el("content").innerHTML=`<div class="hero"><div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div>${profile.role==="gat4_admin"?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
+ el("content").innerHTML=`<div class="hero"><div><h2>${esc(p.title)}</h2><p>${esc(p.intro)}</p></div>${adminEditingEnabled()?'<button class="btn secondary" id="editPanel">✏️ Editar painel</button>':""}</div>
  <div class="grid"><div class="stat"><b>${marcos||0}</b>marcos da rota</div><div class="stat"><b>${gat4||0}</b>participantes GAT 4</div><div class="stat"><b>${registros||0}</b>registros de bordo</div><div class="stat"><b>${gestao||0}</b>itens de gestão</div></div>
  <div class="card"><h3>Situação atual</h3><p><b>Fase:</b> ${esc(p.phase)}. <b>GAT em foco:</b> ${esc(p.focus)}. <b>Integração:</b> ${esc(p.integration)}.</p></div><div class="card"><h3>Próximos marcos</h3><p>${esc(p.next_milestones||"").replace(/\n/g,"<br>")}</p></div>
  <div class="card"><h3>Arquitetura de acesso</h3><p><b>Cabine GAT 4:</b> ${esc(p.cabin_text)} <b>Eixo 2:</b> ${esc(p.eixo2_text)} <b>Cassino dos Oficiais:</b> ${esc(p.cassino_text)} <b>Praça da Tripulação:</b> ${esc(p.praca_text)} <b>Coordenação:</b> ${esc(p.coordination_text)}</p></div>
  <div id="panelEditor"></div>`;
- if(profile.role==="gat4_admin") el("editPanel").onclick=()=>renderPanelEditor(p);
+ if(adminEditingEnabled()) el("editPanel").onclick=()=>renderPanelEditor(p);
 }
 function renderPanelEditor(p){
  el("panelEditor").innerHTML=`<div class="card"><h3>Editar texto do Painel</h3><form id="panelForm"><div class="formgrid">
@@ -190,7 +203,7 @@ function reportForm(r){
 }
 function exportReport(r){let html='<html><meta charset="utf-8"><body><h1>RELATÓRIO MENSAL DO GT – PET-SAÚDE: CLIMA</h1><p><b>Competência:</b> '+fmt(r.competence)+'<br><b>GT:</b> '+esc(r.gt)+'</p>';reportFields.forEach(([k,l])=>html+='<h2>'+l+'</h2><p>'+esc(r[k]||"").replace(/\n/g,"<br>")+'</p>');html+='</body></html>';const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"application/msword"}));a.download='relatorio-'+r.competence+'.doc';a.click();URL.revokeObjectURL(a.href)}
 async function renderAdmin(){
- if(profile.role!=="gat4_admin") return navigate("home");
+ if(!adminEditingEnabled()) return navigate("home");
  const [{data:ps},{data:inv}]=await Promise.all([supabase.from("profiles").select("*").order("display_name"),supabase.from("invites").select("*").order("created_at",{ascending:false})]);
  el("content").innerHTML=`<div class="hero"><div><h2>⚙️ Usuários e permissões</h2><p>Cadastre participantes e atribua o papel correto.</p></div></div>
  <div class="grid"><div class="card"><h3>Criar acesso</h3><form id="uf"><label>Nome</label><input name="display_name" required><label>E-mail</label><input name="email" type="email" required><label>Papel</label><select name="role"><option value="gat4_admin">Tutoria GAT 4</option><option value="eixo2_editor">Tutoria Eixo 2 (Jenifer/Kristianne)</option><option value="sus_editor">Preceptora / Orientadora — Cassino dos Oficiais</option><option value="student">Estudante</option><option value="coordinator_view">Coordenação — visualização/exportação</option></select><button class="btn">Criar acesso</button></form><div id="tempPass"></div></div>
